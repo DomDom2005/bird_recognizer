@@ -1,0 +1,7 @@
+# Development dependencies: tests, lint, HTTP mocks, time freezing.
+# Wersje przypięte po pierwszej udanej instalacji (SPEC §15.6).
+pytest==9.2.0
+pytest-cov==7.1.0
+responses==0.26.3
+ruff==0.17.3
+freezegun==1.5.5

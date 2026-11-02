@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.tmp/
+.pytest_cache/
+# Pozostałości pytest z ograniczonym ACL (środowisko sandbox — patrz docs/ai-journal.md)
+pytest-cache-files-*/
+pytest-of-*/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Sekrety (SPEC §13) — .env nigdy nie wchodzi do repo
+.env
+
+# Dane i wyniki są poza repo (SPEC §13, §7)
+data/
+runs/
+reports/
+
+# Artefakty modeli i audio (licencje CC — SPEC §4.2)
+*.db
+*.pt
+*.pth
+*.npy
+*.joblib
+*.mp3
+*.wav
+*.flac
+*.ogg

@@ -1,0 +1,40 @@
+# D1 (SPEC §3): 12 gatunków. KOLEJNOŚĆ = identyfikatory klas w etykietach,
+# więc zmiana kolejności unieważnia zapisane modele i runy. Zmiana listy wymaga
+# decyzji człowieka (SPEC §3, §15.4).
+#
+# `pair` grupuje pary mylące się (analiza błędów, SPEC §11.3).
+# `latin` trafia do zapytania jako sp:"<latin>" (SPEC §4.1) — bez cudzysłowów
+# xeno-canto zwróci błąd, więc nazwa musi być poprawna dwuczłonowa.
+species:
+  - pl: wróbel
+    latin: Passer domesticus
+    pair: wrobel-mazurek
+  - pl: mazurek
+    latin: Passer montanus
+    pair: wrobel-mazurek
+  - pl: bogatka
+    latin: Parus major
+    pair: bogatka-modra
+  - pl: modra
+    latin: Cyanistes caeruleus
+    pair: bogatka-modra
+  - pl: kos
+    latin: Turdus merula
+    pair: kos-kwiczol
+  - pl: kwiczoł
+    latin: Turdus philomelos
+    pair: kos-kwiczol
+  - pl: pierwiosnek
+    latin: Phylloscopus collybita
+    pair: pierwiosnek-piecuszek
+  - pl: piecuszek
+    latin: Phylloscopus trochilus
+    pair: pierwiosnek-piecuszek
+  - pl: rudzik
+    latin: Erithacus rubecula
+  - pl: zięba
+    latin: Fringilla coelebs
+  - pl: szczygieł
+    latin: Carduelis carduelis
+  - pl: dzwoniec
+    latin: Chloris chloris

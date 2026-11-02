@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bird_recognizer"
+version = "0.1.0"
+description = "Bird species classification from audio: CNN vs CRNN comparison."
+readme = "README.md"
+requires-python = ">=3.11"
+# Zależności runtime są w requirements.txt — jedno źródło prawdy (SPEC §15.6).
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra -p no:cacheprovider"
+
+[tool.coverage.run]
+source = ["src/bird_recognizer"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"

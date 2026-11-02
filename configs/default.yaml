@@ -1,0 +1,76 @@
+# Wartości domyślne pipeline'u — źródło prawdy: SPEC §10.
+# Zmiana dowolnej wartości tutaj = nowy run, nie edycja wyników (SPEC §15.3).
+seed: 42
+
+paths:
+  # Oba katalogi są poza repo (.gitignore).
+  data_dir: data
+  runs_dir: runs
+
+api:
+  base_url: https://xeno-canto.org/api/3/recordings
+  # TODO(verify) SPEC §4.3 pkt 1: dokładna postać tagu kraju — sprawdź probe_api.py --live.
+  country: poland
+  quality: '">C"'      # A i B (SPEC §4.1)
+  # status:identified według dokumentacji istnieje, ale API odpowiada na niego
+  # HTTP 400 (sprawdzone 2026-11-02, docs/api-notes.md §3 pkt 3).
+  # Pusty łańcuch = tag pominięty. Nie usuwaj klucza: wraca, gdy API to naprawi.
+  status: ""
+  per_page: 100        # wymagane 50..500
+  request_interval_s: 1.0
+  connect_timeout_s: 10
+  read_timeout_s: 60
+  download_timeout_s: 300
+  max_retries: 5
+
+audio:
+  sample_rate: 32000
+  highpass_hz: 100
+  highpass_order: 4
+  window_s: 3.0
+  hop_s: 1.5
+
+spectrogram:
+  n_fft: 1024
+  win_length: 1024
+  hop_length: 512
+  n_mels: 128
+  fmin: 150
+  fmax: 15000
+  power: 2.0
+  top_db: 80
+  normalise: true
+
+gating:
+  abs_floor: 0.001
+  rel_floor: 0.1
+  percentile: 90
+
+augment:
+  preset: basic        # none | basic | full (SPEC §10.3)
+  shift_s: 1.0
+  gain_db: 3.0
+  noise_snr_min: 5.0
+  noise_snr_max: 20.0
+  mixup_alpha: 0.4
+  freq_masks: 2
+  freq_mask_width: 16
+  time_masks: 2
+  time_mask_width: 20
+
+training:
+  batch_size: 32
+  optimizer: adamw
+  lr: 0.001
+  lr_finetune: 0.0003
+  weight_decay: 0.0001
+  epochs: 50
+  epochs_finetune: 20
+  early_stopping_patience: 8
+  early_stopping_min_delta: 0.001
+  grad_clip: 5.0
+  class_weight: balanced
+  label_smoothing: 0.0
+  scheduler: cosine
+  warmup_epochs: 1
+  num_workers: 0       # Windows: >0 wymaga if __name__ == "__main__"
