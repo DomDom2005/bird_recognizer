@@ -47,6 +47,12 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
 10. **Otwarte na etap 2:** `requirements-dev.txt` zawiera `responses`, które mockuje `requests`.
     Nasz klient będzie na `urllib` (stdlib), więc mockowanie zrobimy na granicy modułu albo
     świadomie dodamy `requests`. Decyzja i ewentualna poprawka SPEC §12 — w etapie 2.
+11. **Błąd własny (naprawiony):** przepisałem `tests/test_config.py` przez PowerShell
+    (`Get-Content -Raw ... | Set-Content`) i skorzystałem z domyślnego kodowania konsoli —
+    polskie znaki w pliku zamieniły się w mojibake („SPEC Â§12”), przez co test na etykiety
+    gatunków zaczął padać z `KeyError`. Naprawa: plik napisany od nowa w UTF-8 narzędziem
+    do zapisu plików, a nie przez PowerShell; testy wróciły do 26 passed. Wniosek: pliki
+    z polskim tekstem edytuję tylko przez `write`/`edit`, nie przez `Set-Content`.
 
 ## Refleksja
 
