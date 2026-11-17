@@ -91,6 +91,21 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     a przebiegi `--smoke` w etapach 4–6 korzystają z realnego katalogu z `--limit` na gatunek.
     SPEC do podbicia na 1.3 przy wejściu w etap 3.
 
+## Wznowienie po przerwie (2026-11-18)
+
+Praca przerwana na życzenie właściciela; wszystko jest w spójnym stanie i nie ma
+nic niezacommitowanego (poza `data/`, które jest poza repo).
+
+- **Zrobione:** etap 1 `[x]`, etap 2 `[x]` (commity `e715514`, `1d77624`, `a5f1a11`).
+- **Nierozpoczęte:** etap 3 (preprocessing i cache) — karta w SPEC §15.8.
+- **Pobieranie audio przerwane na 169/2917 plikach** (`data/raw`). Wznowienie:
+  `python -m bird_recognizer.cli data download` — pomija istniejące pliki; jeśli w raporcie
+  są błędy, `--retry-failed`. Plików tymczasowych `.*.tmp` nie ma.
+- **Decyzja do wprowadzenia w SPEC (1.3):** usunąć FR-15 i `make_synthetic_demo.py` oraz
+  odwołania w §15.8–15.10; testy generują krótkie WAV-y w `tmp_dir`, a `--smoke` korzysta
+  z realnego katalogu z `--limit` (patrz odstępstwo 18).
+- **Pierwszy krok nowej sesji:** §15.5 — `git log` → tabela 15.1 → karta etapu 3 → ten wpis.
+
 ## Refleksja
 
 Sekcja dla człowieka — uzupełniana po zakończeniu projektu (SPEC §16 pkt 8).
