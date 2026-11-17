@@ -4,8 +4,8 @@ Klasyfikacja gatunku ptaka z nagrania: mel-spektrogramy, CNN, transfer wiedzy i 
 Projekt badawczy (studia AI), pytanie: **ile daje modelowanie czasu w porównaniu z modelem,
 który patrzy na spektrogram okna bez rekurencji?**
 
-> **Status: etap 1 z 8** (patrz `project info/SPEC.md` §15). Ten README opisuje stan faktyczny:
-> sekcje wyników są puste do etapu 6, a demo powstaje w etapie 8.
+> **Status: etap 2 z 8** (patrz `project info/SPEC.md` §15). Katalog nagrań, pobieranie audio
+> i podział train/val/test są gotowe; modele i wyniki pojawią się w etapach 3–6, demo w etapie 8.
 
 ## 1. Cel i pytanie badawcze
 
@@ -28,8 +28,10 @@ od zera vs. wstępnie wytrenowane, pooling. Szczegóły: `project info/SPEC.md` 
 - 12 gatunków, w tym cztery pary mylące się (`configs/species.yaml`, decyzja D1).
 - Dostępność sprawdzona 2026-11-02: **81–606 nagrań na gatunek** (najmniej szczygieł 81,
   najwięcej bogatka 606) — wszystkie powyżej progu 50. Szczegóły: `docs/api-notes.md` §4.
+- Katalog zbudowany 2026-11-18: **2917 nagrań**, 2 zredagowane przez API (gatunki chronione).
 - Podział train/val/test **według nagrań i grup nagrywających**, z kontrolą wycieku
-  (`scripts/check_leakage.py`).
+  (`scripts/check_leakage.py`): train 2203 (7 nagrywających) / val 407 (43) / test 307 (43),
+  wszystkie 12 gatunków w każdej części, 0 ostrzeżeń.
 - Licencje nagrań są różne (Creative Commons); **audio nie trafia do repo**.
 
 ## 3. Przepływ danych
@@ -57,17 +59,31 @@ python scripts/probe_api.py --dry-run
 python scripts/probe_api.py --live      # jeden request na punkt; wymaga klucza
 ```
 
-Kolejne kroki (etapy 2–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
+Pobranie danych (etap 2):
+
+```bash
+bird_recognizer data catalog            # metadane wszystkich gatunków -> data/catalog.jsonl
+bird_recognizer data download --limit 10   # audio -> data/raw, wznawialne
+bird_recognizer data split              # -> data/splits.json
+python scripts/check_leakage.py --data-dir data
+```
+
+Jeśli komenda `bird_recognizer` nie jest w PATH (tak jest na części instalacji Windows,
+gdzie `pip` instaluje skrypty do katalogu spoza PATH), użyj równoważnej formy
+`python -m bird_recognizer.cli …`.
+
+Kolejne kroki (etapy 3–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
 
 ## 5. Tryb bez internetu
 
 - `python scripts/probe_api.py --dry-run` — waliduje config i wypisuje zapytania, zero requestów.
 - `python scripts/make_synthetic_demo.py` (etap 3) — mały syntetyczny zbiór do testów end-to-end.
-- Testy nigdy nie dotykają sieci: `tests/conftest.py` blokuje gniazda na całą sesję.
+- Testy nigdy nie dotykają sieci: `tests/conftest.py` blokuje gniazda na całą sesję,
+  a HTTP jest mockowany wstrzykiwanym transportem (`tests/support.py`).
 
 ## 6. Wyniki
 
-Dla etapu 1: brak — modeli jeszcze nie ma. Tabela ablacji powstanie w `docs/experiments.md`
+Dla etapu 2: brak — modeli jeszcze nie ma. Tabela ablacji powstanie w `docs/experiments.md`
 generowanym z `runs/index.csv`. Wnioski badawcze dopisuje człowiek.
 
 ## 7. Testy
@@ -75,10 +91,12 @@ generowanym z `runs/index.csv`. Wnioski badawcze dopisuje człowiek.
 ```bash
 pytest                 # całość, offline (gniazda zablokowane)
 ruff check .
+pytest --cov=bird_recognizer.xc --cov=bird_recognizer.data   # pokrycie etapu 2
 ```
 
-Zakres: konfiguracja i jej walidacja, redakcja sekretów w logach, blokada sieci w testach.
-Kolejne etapy dodają testy klienta API, podziału danych, okien, modeli i metryk.
+Stan: 99 testów; pokrycie `xc/` 90–94%, `data/splits.py` 96%. Zakres: konfiguracja, redakcja
+sekretów, blokada sieci, klient API (paginacja, `400`/`403`/`429`/`5xx`, backoff), katalog,
+pobieranie z wznawianiem, podział i kontrola wycieku, CLI.
 
 ## 8. Struktura repo
 
@@ -86,9 +104,11 @@ Kolejne etapy dodają testy klienta API, podziału danych, okien, modeli i metry
 bird_recognizer/
 ├── project info/          # SPEC.md, PLAN.md, AGENTS.md
 ├── configs/               # default.yaml (progi), species.yaml (12 gatunków)
-├── src/bird_recognizer/   # config, errors, logging_setup (+ pakiety etapów 2–7)
-├── scripts/               # probe_api.py, (etap 2–3: check_leakage, synthetic demo)
-├── tests/
+├── src/bird_recognizer/   # config, errors, logging_setup, cli
+│   ├── xc/                # client, catalog, download
+│   └── data/              # splits (+ etap 3: audio, windows, cache)
+├── scripts/               # probe_api.py, check_leakage.py, (etap 3: synthetic demo)
+├── tests/                 # + fixtures/api, fixtures/synthetic_data
 ├── docs/                  # api-notes, ai-journal, data-flow, manual-checklist
 └── README.md
 ```
@@ -105,6 +125,11 @@ Pełne drzewo: `project info/SPEC.md` §5. Dane (`data/`) i wyniki (`runs/`) są
 - Własne nagrania z telefonu to inna domena (tło miasta, odległość) — spadek jakości jest
   oczekiwany i raportowany osobno.
 - Trening na GPU bywa niedeterministyczny mimo seeda; raportujemy urządzenie przy każdym runie.
+- Grupy nagrywających są bardzo nierówne (jeden nagrywający = setki plików), więc train zbiera
+  kilku najpłodniejszych, a val/test — dziesiątki mniejszych; podział jest deterministyczny
+  i bez wycieku, ale nie jest losowaniem pojedynczych nagrań.
+- Liczby w README to snapshoty z podaną datą; katalog xeno-canto rośnie, więc przed etapem 3
+  odśwież `data catalog` i zapisz nowe wartości.
 - `TODO(verify)` z `project info/SPEC.md` §4.3 są otwarte do czasu uruchomienia `probe_api.py --live`.
 
 ## 10. Bezpieczeństwo i licencje

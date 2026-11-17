@@ -9,6 +9,8 @@
 | 2026-11-02 | przygotowanie | SPEC przepisany na wykonalny etapowo: tabela statusu, protokół, karty etapów z bramkami | przegląd właściciela | trafne |
 | 2026-11-02 | 1 | szkielet repo: `config.py` (walidacja YAML + alias klucza), `logging_setup.py` z redakcją, `errors.py`, `configs/*.yaml`, `tests/conftest.py` z blokadą gniazd, `scripts/probe_api.py` (dry-run/live), szkielet `docs/` i README | bramka etapu 1: `ruff check .` czysty, `pytest -q` → 26 passed, `load_config()` ok, `probe_api.py --dry-run` exit 0 | trafne po korektach (patrz niżej) |
 | 2026-11-02 | 1 | `probe_api.py --live` na prawdziwym kluczu: 7 sprawdzeń, tempo 1 req/s, klucz nigdy nie wypisany | wyniki w `docs/api-notes.md` i SPEC §4.3 | trafne, ale ujawniło rozbieżność dokumentacji z API (status tag) |
+| 2026-11-18 | 2 | `xc/client.py` (tagi, paginacja, throttle, backoff `429`/`503`, mapowanie błędów), `xc/catalog.py` (scalanie po `id`, `_meta.redacted_fields`, zapis atomowy), `xc/download.py` (wznawianie, sha256, `--retry-failed`, raport), `data/splits.py` (grupy po `rec`, naprawa pokrycia, `check_leakage`), `cli.py` + `scripts/check_leakage.py`, testy na wstrzykiwanym transporcie | bramka etapu 2: `ruff check .` czysty, `pytest -q --cov=…` → 99 passed, pokrycie xc 90–94% i `data/splits.py` 96%, `check_leakage.py` exit 0 na fixtures | trafne po dwóch korektach algorytmu podziału |
+| 2026-11-18 | 2 | uruchomienie na żywo: `data catalog` (2917 nagrań), `data split` (2203/407/307), `data download --limit 2` (3,3 MB) i ponowne uruchomienie (wznawianie: 2 pominięte) | `check_leakage.py --data-dir data` → brak wycieku; raport pobierania i `sha256_audio` w katalogu | trafne; live run wykrył błąd podziału, którego testy nie łapały |
 
 ## Odstępstwa od SPEC
 
@@ -44,15 +46,31 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
    i przewracał się na `→`. Skrypt przełącza stdout/stderr na UTF-8 (`_configure_stdout`).
 9. **Bramka etapu 1 (§15.6).** Dopisane `python scripts/probe_api.py --dry-run`, żeby bramka
    sprawdzała też FR-16 offline. SPEC podbite do 1.1.
-10. **Otwarte na etap 2:** `requirements-dev.txt` zawiera `responses`, które mockuje `requests`.
-    Nasz klient będzie na `urllib` (stdlib), więc mockowanie zrobimy na granicy modułu albo
-    świadomie dodamy `requests`. Decyzja i ewentualna poprawka SPEC §12 — w etapie 2.
+10. **`responses` usunięte (§12).** Postanowienie z etapu 1 zrealizowane: klient siedzi na
+    `urllib`, a testy wstrzykują własny `FakeTransport` (kolejka odpowiedzi). `responses`
+    zniknęło z `requirements-dev.txt`, SPEC §12 i drzewo repo zaktualizowane.
 11. **Błąd własny (naprawiony):** przepisałem `tests/test_config.py` przez PowerShell
     (`Get-Content -Raw ... | Set-Content`) i skorzystałem z domyślnego kodowania konsoli —
     polskie znaki w pliku zamieniły się w mojibake („SPEC Â§12”), przez co test na etykiety
     gatunków zaczął padać z `KeyError`. Naprawa: plik napisany od nowa w UTF-8 narzędziem
     do zapisu plików, a nie przez PowerShell; testy wróciły do 26 passed. Wniosek: pliki
     z polskim tekstem edytuję tylko przez `write`/`edit`, nie przez `Set-Content`.
+12. **Błąd podziału na żywych danych (naprawiony).** Pierwsza wersja `make_split` wybierała
+    podział minimalizujący `|przypisane + rozmiar − cel|` — na 2917 nagraniach dało to
+    **train = 0**, bo grupy nagrywających są bardzo nierówne (jeden nagrywający = setki plików).
+    Testy na syntetycznych, równych grupach tego nie łapały. Naprawa: val/test wypełniane
+    najpierw małymi grupami (różnorodność nagrywających), duże grupy → train, potem naprawa
+    pokrycia gatunków. Dodane testy regresyjne: `test_train_keeps_the_majority_share`,
+    `test_uneven_recordist_sizes_do_not_starve_train`.
+13. **`bird_recognizer` nie jest w PATH.** Editable install zarejestrował `bird_recognizer.exe`
+    w `…\Python\…\Scripts`, ale ten katalog nie jest w PATH tej sesji. Do czasu dodania PATH
+    komendy uruchamiam jako `python -m bird_recognizer.cli …`; README i AGENTS mają fallback.
+14. **`counts` w `splits.json` (§7.2).** SPEC pokazywał `windows`; przy podziale nie znamy
+    jeszcze liczby okien (powstaje w etapie 3). Zapisujemy `recordings`, `species`, `groups`,
+    a `windows` dojdzie po cache — świadome odstępstwo, nie brak.
+15. **Wspólny `configure_console()`.** Poprawka kodowania z etapu 1 (`_configure_stdout`
+    w `probe_api.py`) przeniesiona do `logging_setup.py`, bo ten sam problem dotyczył CLI
+    i `check_leakage.py`; `probe_api.py` korzysta teraz z funkcji wspólnej.
 
 ## Refleksja
 

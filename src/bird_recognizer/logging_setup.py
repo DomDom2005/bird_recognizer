@@ -61,3 +61,16 @@ def setup_logging(
     root.handlers[:] = [handler]
     root.setLevel(level.upper() if isinstance(level, str) else level)
     return root
+
+
+def configure_console() -> None:
+    """Force UTF-8 on stdout/stderr so Polish text survives Windows consoles."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            continue
+

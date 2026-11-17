@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "seed": 42,
+  "created_at": "2026-11-02T00:00:00+00:00",
+  "strategy": {
+    "by": "recording",
+    "group": "recordist",
+    "stratify": "species"
+  },
+  "splits": {
+    "train": ["XC2001", "XC2002", "XC2006"],
+    "val": ["XC2003", "XC2004", "XC2007"],
+    "test": ["XC2005", "XC2008", "XC2009", "XC2010"]
+  },
+  "counts": {
+    "train": {"recordings": 3, "species": 2, "groups": 1},
+    "val": {"recordings": 3, "species": 2, "groups": 1},
+    "test": {"recordings": 4, "species": 2, "groups": 1}
+  },
+  "warnings": []
+}

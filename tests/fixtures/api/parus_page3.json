@@ -1,0 +1,46 @@
+{
+  "numRecordings": "3",
+  "numSpecies": "2",
+  "page": 3,
+  "numPages": 3,
+  "recordings": [
+    {
+      "id": "XC1004",
+      "gen": "Parus",
+      "sp": "major",
+      "en": "Great Tit",
+      "grp": "birds",
+      "rec": "Piotr Zieliński",
+      "cnt": "Poland",
+      "loc": "",
+      "lat": "",
+      "lon": "",
+      "alt": "",
+      "type": "song",
+      "sex": "male",
+      "stage": "adult",
+      "status": "identified",
+      "date": "2024-07-02",
+      "time": "08:00",
+      "uploaded": "2024-07-03",
+      "length": "3:20",
+      "smp": "44100",
+      "q": "A",
+      "lic": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "url": "https://xeno-canto.org/XC1004",
+      "file": "",
+      "file-name": "",
+      "also": [],
+      "rmk": "",
+      "_meta": {
+        "redacted_fields": {
+          "loc": "restricted_species",
+          "lat": "restricted_species",
+          "lon": "restricted_species",
+          "file": "restricted_species",
+          "file-name": "restricted_species"
+        }
+      }
+    }
+  ]
+}

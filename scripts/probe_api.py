@@ -41,6 +41,7 @@ from bird_recognizer.config import (  # noqa: E402
     load_config,
 )
 from bird_recognizer.errors import ApiError, AppError, MissingApiKeyError  # noqa: E402
+from bird_recognizer.logging_setup import configure_console  # noqa: E402
 
 USER_AGENT = "bird_recognizer/0.1.0 (research project; xeno-canto API v3)"
 _KEY_RE = re.compile(r"(?i)(key=)[^&\s]+")
@@ -379,20 +380,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def _configure_stdout() -> None:
-    """Polish text on Windows consoles: force UTF-8 instead of the legacy codepage."""
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is None:
-            continue
-        try:
-            reconfigure(encoding="utf-8", errors="replace")
-        except (ValueError, OSError):
-            continue
-
-
 def main(argv: list[str] | None = None) -> int:
-    _configure_stdout()
+    configure_console()
     args = parse_args(argv)
     try:
         config = load_config(

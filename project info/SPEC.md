@@ -1,6 +1,6 @@
 # SPEC.md — bird_recognizer
 
-> Wersja 1.1 · 2026-11-02 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
+> Wersja 1.2 · 2026-11-18 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
 > Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium: `https://github.com/DomDom2005/bird_recognizer` — **`TODO(verify)`**: potwierdzić nazwę repo i branch (`main`) u człowieka, zanim wklei się to do README.
 
 ---
@@ -158,7 +158,7 @@ bird_recognizer/
 ├── AGENTS.md                  # cienki wskaźnik do project info/AGENTS.md
 ├── README.md                  # po polsku (sekcja 14)
 ├── requirements.txt           # wersje przypięte po pierwszej udanej instalacji
-├── requirements-dev.txt       # pytest, pytest-cov, responses, ruff, freezegun
+├── requirements-dev.txt       # pytest, pytest-cov, ruff, freezegun
 ├── pyproject.toml             # layout src/, konfiguracja pytest i ruff
 ├── .env.example               # same nazwy zmiennych, żadnych wartości
 ├── .gitignore                 # .env, data/, runs/, *.wav, *.mp3, *.npy, *.pt
@@ -480,7 +480,7 @@ Struktura: problem i pytanie badawcze → dane (źródło, licencje, liczebnoś�
 
 ## 12. Testy
 
-`pytest` + `pytest-cov` + `responses` (mock HTTP). Cel: pokrycie ≥ 80% dla `xc/client`, `data/windows`, `data/splits`, `eval/metrics`, `train/runner`, `config`. **Żadnych prawdziwych wywołań sieci** — blokada gniazd w `conftest.py`.
+`pytest` + `pytest-cov`. **Mockowanie HTTP bez zależności zewnętrznych:** transport (`xc.client.HttpTransport`) jest wstrzykiwany, więc testy podają własny `FakeTransport` z kolejką odpowiedzi (zamiast `responses`). Cel: pokrycie ≥ 80% dla `xc/client`, `data/windows`, `data/splits`, `eval/metrics`, `train/runner`, `config`. **Żadnych prawdziwych wywołań sieci** — blokada gniazd w `conftest.py`.
 
 |Obszar|Przypadki|
 |---|---|
@@ -552,7 +552,7 @@ Dodatkowo: `docs/experiments.md` (generowany + wnioski), `docs/manual-checklist.
 | Etap | Nazwa | Rozmiar | Zależy od | Czego potrzebujesz od człowieka | Status |
 |---|---|---|---|---|---|
 | 1 | Zakres, decyzje i szkielet repo | M | — | klucz API, zgoda na D1 | `[x]` 2026-11-02 |
-| 2 | Dane: katalog, pobieranie, podział | L | 1 | — | `[ ]` |
+| 2 | Dane: katalog, pobieranie, podział | L | 1 | — | `[x]` 2026-11-18 |
 | 3 | Preprocessing i cache spektrogramów | M | 2 | — | `[ ]` |
 | 4 | Baseline: MFCC+SVM i mały CNN | L | 3 | — | `[ ]` |
 | 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[ ]` |
@@ -649,13 +649,18 @@ bramka działa bez zmian; szczegóły i obejścia w `docs/ai-journal.md`.
 **Tworzy/zmienia:** `xc/{client,catalog,download}.py`, `data/splits.py`, `scripts/check_leakage.py`, `cli.py` (komendy `data *`), `tests/{test_xc_client,test_catalog,test_download,test_splits}.py`, `tests/fixtures/*.json`.
 **Zadania**
 
-- [ ] `XCClient`: query wyłącznie z tagów (cudzysłowy dla `sp:`/`q:`), `per_page` w 50–500, paginacja `1..numPages`, tempo 1 req/s, mapowanie błędów z §9, backoff dla `429`/`503`.
-- [ ] `catalog`: scalanie po `id` (idempotentne), `redacted` z `_meta`, `fetched_at`, zapis atomowy, `catalog.meta.json` **bez klucza**.
-- [ ] `download`: wznawianie, `sha256`, `--retry-failed`, pomijanie zredagowanych jako `redacted` (nie błąd), `download_report.json`.
-- [ ] `splits`: grupowanie po `rec`, stratyfikacja, seed, minimum 3 nagrania/gatunek w teście, `warnings`, determinizm, `--force`.
-- [ ] `check_leakage.py`: trzy warunki (id, `rec`, `sha256`) + kod wyjścia ≠ 0 przy naruszeniu.
-- [ ] CLI `data catalog|download|split` z kodami wyjścia z §8.
-- [ ] fixtures: 3 strony odpowiedzi, `400`/`403`/`429`, nagranie z `_meta.redacted_fields`.
+- [x] `XCClient`: query wyłącznie z tagów (cudzysłowy dla `sp:`/`q:`), `per_page` w 50–500, paginacja `1..numPages`, tempo 1 req/s, mapowanie błędów z §9, backoff dla `429`/`503`.
+- [x] `catalog`: scalanie po `id` (idempotentne), `redacted` z `_meta`, `fetched_at`, zapis atomowy, `catalog.meta.json` **bez klucza**.
+- [x] `download`: wznawianie, `sha256`, `--retry-failed`, pomijanie zredagowanych jako `redacted` (nie błąd), `download_report.json`.
+- [x] `splits`: grupowanie po `rec`, stratyfikacja, seed, minimum 3 nagrania/gatunek w teście, `warnings`, determinizm, `--force`.
+- [x] `check_leakage.py`: trzy warunki (id, `rec`, `sha256`) + kod wyjścia ≠ 0 przy naruszeniu.
+- [x] CLI `data catalog|download|split` z kodami wyjścia z §8.
+- [x] fixtures: 3 strony odpowiedzi, `400`/`403`/`429`, nagranie z `_meta.redacted_fields`.
+
+**Wynik na żywych danych (2026-11-18):** katalog 2917 nagrań (12 gatunków, 2 zredagowane),
+podział train 2203 / val 407 (43 nagrywających) / test 307 (43 nagrywających), 0 ostrzeżeń;
+`check_leakage.py` czysty. Test pobierania: 2 pliki (3,3 MB), ponowne uruchomienie →
+`ok=0, pominięte=2` (wznawianie działa).
 
 **Bramka**
 

@@ -11,6 +11,9 @@ requires-python = ">=3.11"
 # Zależności runtime są w requirements.txt — jedno źródło prawdy (SPEC §15.6).
 dependencies = []
 
+[project.scripts]
+bird_recognizer = "bird_recognizer.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

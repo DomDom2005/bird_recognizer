@@ -1,0 +1,37 @@
+{
+  "numRecordings": "3",
+  "numSpecies": "1",
+  "page": 2,
+  "numPages": 3,
+  "recordings": [
+    {
+      "id": "XC1003",
+      "gen": "Parus",
+      "sp": "major",
+      "en": "Great Tit",
+      "grp": "birds",
+      "rec": "Maria Wiśniewska",
+      "cnt": "Poland",
+      "loc": "Kampinos",
+      "lat": "52.3",
+      "lon": "20.6",
+      "alt": "90",
+      "type": "song",
+      "sex": "female",
+      "stage": "adult",
+      "status": "identified",
+      "date": "2024-06-11",
+      "time": "07:15",
+      "uploaded": "2024-06-12",
+      "length": "1:05",
+      "smp": "48000",
+      "q": "A",
+      "lic": "https://creativecommons.org/licenses/by/4.0/",
+      "url": "https://xeno-canto.org/XC1003",
+      "file": "https://xeno-canto.org/1003/download",
+      "file-name": "XC1003-great-tit.flac",
+      "also": [],
+      "rmk": ""
+    }
+  ]
+}

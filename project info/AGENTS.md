@@ -25,10 +25,13 @@ bird_recognizer eval --run RUN --split test
 bird_recognizer demo --run RUN
 ```
 
+Jeśli `bird_recognizer` nie jest w PATH (zdarza się po `pip install -e .` na Windows),
+używaj równoważnej formy `python -m bird_recognizer.cli <komenda>`.
+
 ## Zasady
 
-- Testy działają offline na mockach (`responses`), z blokadą gniazd w `conftest.py`.
-  Żadnych prawdziwych żądań do xeno-canto, żadnego pobierania audio w testach.
+- Testy działają offline: HTTP jest mockowany wstrzykiwanym transportem (`tests/support.py`),
+  a `conftest.py` blokuje gniazda. Żadnych prawdziwych żądań do xeno-canto ani pobierania audio w testach.
 - Klucz API tylko w `.env` jako `BIRD_XC_API_KEY`, poza repo. Klucz jedzie w query stringu,
   więc **nie loguj pełnych URL-i** — filtr redakcji maskuje `key=`.
 - Audio z xeno-canto **nie wchodzi do repo** (licencje CC, część zabrania użycia komercyjnego).
