@@ -28,7 +28,7 @@ od zera vs. wstępnie wytrenowane, pooling. Szczegóły: `project info/SPEC.md` 
 - 12 gatunków, w tym cztery pary mylące się (`configs/species.yaml`, decyzja D1).
 - Dostępność sprawdzona 2026-11-02: **81–606 nagrań na gatunek** (najmniej szczygieł 81,
   najwięcej bogatka 606) — wszystkie powyżej progu 50. Szczegóły: `docs/api-notes.md` §4.
-- Katalog zbudowany 2026-11-18: **2917 nagrań**, 2 zredagowane przez API (gatunki chronione).
+- Katalog zbudowany 2026-11-18: **2917 nagrań**, 0 zredagowanych (wszystkie z tej listy mają plik).
 - Podział train/val/test **według nagrań i grup nagrywających**, z kontrolą wycieku
   (`scripts/check_leakage.py`): train 2203 (7 nagrywających) / val 407 (43) / test 307 (43),
   wszystkie 12 gatunków w każdej części, 0 ostrzeżeń.

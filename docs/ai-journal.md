@@ -80,6 +80,16 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     z `ruff check` (ruff respektuje `.gitignore`) — po naprawie wyszedł jeden `E501` w
     `splits.py`, poprawiony. Wniosek: po `git add` porównuję `git diff --cached --name-only`
     z listą plików, które miały wejść; „zielone testy lokalnie” nie dowodzą, że repo jest kompletne.
+17. **Błędna liczba zredagowanych nagrań.** W podsumowaniu etapu 2 napisałem „2 zredagowane”
+    bez sprawdzenia artefaktu; katalog ma **0** zredagowanych wpisów (`catalog.meta.json`:
+    `redacted: 0`, wszystkie 2917 ma `file`). Poprawione w SPEC §15.7 i README. Wniosek:
+    liczby w dokumentacji biorę z pliku wynikowego, nie z pamięci.
+18. **Rezygnacja z syntetycznego „zbioru demo” (decyzja z 2026-11-18).** Właściciel zaproponował
+    pobranie całego realnego audio od razu i trzymanie `data/` w `.gitignore` — to wystarcza,
+    bo syntetyk nigdy nie był danymi treningowymi, tylko rusztowaniem offline. Uproszczenie:
+    `make_synthetic_demo.py` i FR-15 znikają; testy generują kilkusekundowe WAV-y w `tmp_dir`,
+    a przebiegi `--smoke` w etapach 4–6 korzystają z realnego katalogu z `--limit` na gatunek.
+    SPEC do podbicia na 1.3 przy wejściu w etap 3.
 
 ## Refleksja
 

@@ -657,9 +657,9 @@ bramka działa bez zmian; szczegóły i obejścia w `docs/ai-journal.md`.
 - [x] CLI `data catalog|download|split` z kodami wyjścia z §8.
 - [x] fixtures: 3 strony odpowiedzi, `400`/`403`/`429`, nagranie z `_meta.redacted_fields`.
 
-**Wynik na żywych danych (2026-11-18):** katalog 2917 nagrań (12 gatunków, 2 zredagowane),
-podział train 2203 / val 407 (43 nagrywających) / test 307 (43 nagrywających), 0 ostrzeżeń;
-`check_leakage.py` czysty. Test pobierania: 2 pliki (3,3 MB), ponowne uruchomienie →
+**Wynik na żywych danych (2026-11-18):** katalog 2917 nagrań (12 gatunków, 0 zredagowanych —
+wszystkie mają plik), podział train 2203 / val 407 (43 nagrywających) / test 307 (43 nagrywających),
+0 ostrzeżeń; `check_leakage.py` czysty. Test pobierania: 2 pliki (3,3 MB), ponowne uruchomienie →
 `ok=0, pominięte=2` (wznawianie działa).
 
 **Bramka**
