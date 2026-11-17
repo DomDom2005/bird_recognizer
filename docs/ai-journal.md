@@ -71,6 +71,15 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
 15. **Wspólny `configure_console()`.** Poprawka kodowania z etapu 1 (`_configure_stdout`
     w `probe_api.py`) przeniesiona do `logging_setup.py`, bo ten sam problem dotyczył CLI
     i `check_leakage.py`; `probe_api.py` korzysta teraz z funkcji wspólnej.
+16. **`.gitignore` wycinał pakiet (przyłapane przy commicie etapu 2).** Wzorzec `data/`
+    bez wiodącego `/` ignoruje **każdy** katalog o nazwie `data`, w tym `src/bird_recognizer/data/`.
+    Skutek: `data/__init__.py` nie wszedł do repo już w etapie 1, a `data/splits.py` nie wszedł
+    w etapie 2 — testy przechodziły lokalnie tylko dlatego, że pliki leżą na dysku. Naprawa:
+    wzorce zakotwiczone (`/data/`, `/runs/`, `/reports/`, `/.tmp/`, `/pytest-cache-files-*/`,
+    `/pytest-of-*/`) i osobny commit `fix(repo): …` z pakietem. Ten sam błąd wyłączał pakiet
+    z `ruff check` (ruff respektuje `.gitignore`) — po naprawie wyszedł jeden `E501` w
+    `splits.py`, poprawiony. Wniosek: po `git add` porównuję `git diff --cached --name-only`
+    z listą plików, które miały wejść; „zielone testy lokalnie” nie dowodzą, że repo jest kompletne.
 
 ## Refleksja
 
