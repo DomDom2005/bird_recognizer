@@ -157,6 +157,18 @@ def test_window_dataset_with_lengths_reports_padding(config, tmp_dir: Path) -> N
     assert len(WindowDataset(refs)[0]) == 2
 
 
+def test_window_dataset_returns_float32_copies(config, tmp_dir: Path) -> None:
+    data_dir = tmp_dir / "data-dtype"
+    make_catalog_with_audio(data_dir)
+    build_cache(config, data_dir)
+    refs = build_window_index(config, data_dir)
+    window, label = WindowDataset(refs)[0]
+    assert window.dtype == np.float32
+    assert isinstance(label, int)
+    full = np.load(refs[0].cache_dir / MEL_FILENAME).astype(np.float32)
+    np.testing.assert_array_equal(window, full[refs[0].window])
+
+
 def test_build_without_catalog_raises(config, tmp_dir: Path) -> None:
     with pytest.raises(DataError, match="Brak katalogu"):
         build_cache(config, tmp_dir / "data")

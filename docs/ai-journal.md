@@ -20,6 +20,7 @@
 | 2026-11-20 | 5 | dokończone pobieranie całego zbioru (2917/2917, 0 błędów, 0 zredagowanych, 969 pominiętych przy wznowieniu w dwóch przebiegach) i przebudowa cache: 2897 nagrań, 131 900/151 115 okien (12,7% odrzuconych), 3755,7 min audio, 6,06 GB; 1 duplikat audio `1052072`=`1052075` (oba w train) | `prep cache --verify` → „Cache OK (2897 nagrań)”; `check_leakage.py` exit 0 (brak wspólnych id/rec/sha256); 20 nagrań bez cache: 19 `empty_after_gating` + 1 błąd dekodowania, 0 w test | trafne; pomiar trafił do SPEC §7.4 i §10.2 |
 | 2026-11-21 | 6 | `ablation.py` (5 grup, jedna dźwignia na grupę, `runs/ablation_<grupa>.json`), `eval/report.py` (tabela z `index.csv`, sekcje etapu 7 jako placeholdery), CLI `ablate`/`report`, refaktor `run_neural` (wspólny dla `train` i `ablate`), cache okien 5 s/10 s na twardych linkach, instalacja `torch 2.15.0+cu132` | bramka etapu 6: `ruff check .` czysty, **226 testów**, `ablate --group rnn --smoke` → 3/3 runy, `report` → `docs/experiments.md` z 3 runów, test „jedna różnica w configu” zielony dla 5 grup | trafne po naprawie urządzenia modelu (odstępstwa 35–36) |
 | 2026-11-21 | 6 | pomiar GPU: CRNN `--smoke` 1 epoka 1,6 s (cuda) vs 12 s (cpu); testy CLI wymuszają `--device cpu`, żeby nie zależeć od GPU; cache 5 s i 10 s budowany w tle pod grupę `window` | `train crnn --smoke` → `device=cuda`; wiersze `docs/experiments.md` mają `smoke` w uwagach; pełne runy macierzy dochodzą po etapie 6 (dziennik niżej) | trafne |
+| 2026-11-21 | 6 | **pomiar pełnego epoch** CNN na całym train (95 898 okien, GPU): 757 s przy 38% wykorzystania GPU → wąskie gardło to `WindowDataset` czytający cały `mel.npy` (~4 MB) dla każdego okna przy tasowanym batchu | profil po zmianie: `np.load(mmap_mode="r")` + konwersja jednego okna → **129,7 s/epoch** (5,8× szybciej), identyczne metryki (val macro-F1 0,534, test 0,506); cache okien 5 s/10 s zweryfikowany (2889/2881 nagrań, 0 problemów) | trafne; poprawka w osobnym commicie `perf(data)` |
 
 ## Odstępstwa od SPEC
 
@@ -194,6 +195,13 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
 40. **Smoke w ablacji ma nierówne `n` między podziałami.** `--limit 2` działa per gatunek
     i per podział, a nagrania mają różne długości, więc wiersze mają np. 762/910/825 okien;
     są oznaczone `smoke` w uwagach i nie są wynikami badania.
+41. **Dataset czytał całe nagrania dla każdego okna (zmierzone, naprawione).** Pełny epoch CNN
+    na 95 898 oknach trwał **757 s** przy 38% wykorzystania GPU. Przyczyna: `WindowDataset`
+    robił `np.load(...).astype(float32)` całego `mel.npy` (~4 MB) przy każdym nowym nagraniu,
+    a tasowane batche dotykają kilkudziesięciu nagrań na raz; LRU 16 nie wystarczał. Naprawa:
+    `np.load(mmap_mode="r")` i konwersja tylko wybranego okna do float32. Ten sam epoch:
+    **129,7 s** (5,8× szybciej), a metryki **identyczne** (val macro-F1 0,534, test 0,506) —
+    dowód, że zmiana jest wyłącznie wydajnościowa. Dodany test dtype i zgodności z pełnym odczytem.
 
 ## Wznowienie po przerwie (2026-11-18)
 

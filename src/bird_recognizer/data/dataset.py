@@ -498,7 +498,7 @@ class WindowDataset:
             raise DataError(
                 f"{ref.recording_id}: okno {ref.window} poza cache ({mel.shape[0]})"
             )
-        window = mel[ref.window]
+        window = np.asarray(mel[ref.window], dtype=np.float32)
         if not self.with_lengths:
             return window, int(ref.label)
         frames = window.shape[-1]
@@ -520,7 +520,10 @@ class WindowDataset:
         path = Path(cache_dir) / MEL_FILENAME
         if not path.is_file():
             raise DataError(f"{cache_dir}: brak {MEL_FILENAME}")
-        array = np.load(path).astype(np.float32)
+        # Memory-map instead of reading the whole recording: shuffled windows make
+        # every batch touch dozens of recordings, and reading ~4 MB per window was
+        # the bottleneck (full epoch 757 s at 38% GPU utilisation, journal 2026-11-21).
+        array = np.load(path, mmap_mode="r")
         self._cache[recording_id] = array
         if len(self._cache) > self._cache_size:
             self._cache.popitem(last=False)
