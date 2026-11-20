@@ -24,6 +24,8 @@ def _argv(tmp_dir: Path, *rest: str) -> list[str]:
         str(tmp_dir / "data"),
         "--runs-dir",
         str(tmp_dir / "runs"),
+        "--device",
+        "cpu",
         *rest,
     ]
 

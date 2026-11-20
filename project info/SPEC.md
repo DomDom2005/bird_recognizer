@@ -1,6 +1,6 @@
 # SPEC.md — bird_recognizer
 
-> Wersja 1.4 · 2026-11-20 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
+> Wersja 1.5 · 2026-11-21 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
 > Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium: `https://github.com/DomDom2005/bird_recognizer` — **`TODO(verify)`**: potwierdzić nazwę repo i branch (`main`) u człowieka, zanim wklei się to do README.
 
 ---
@@ -568,7 +568,7 @@ Dodatkowo: `docs/experiments.md` (generowany + wnioski), `docs/manual-checklist.
 | 3 | Preprocessing i cache spektrogramów | M | 2 | — | `[x]` 2026-11-20 |
 | 4 | Baseline: MFCC+SVM i mały CNN | L | 3 | — | `[x]` 2026-11-20 |
 | 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[x]` 2026-11-20 |
-| 6 | Eksperymenty i ablacje | L | 5 | — | `[ ]` |
+| 6 | Eksperymenty i ablacje | L | 5 | — | `[x]` 2026-11-21 |
 | 7 | Ewaluacja i analiza błędów | M | 6 | własne nagrania z telefonu | `[ ]` |
 | 8 | Demo, raport i domknięcie | M | 7 | wnioski w `experiments.md` | `[ ]` |
 | 9 | Rozszerzenia (opcjonalny) | ? | 8 | decyzja D12 | `[-]` |
@@ -809,11 +809,11 @@ wagi ImageNet raz (w sandboxie `TORCH_HOME` poza repo, patrz dziennik, odstępst
 **Tworzy/zmienia:** `ablation.py`, `cli.py` (`ablate`, `report`), `eval/report.py` (część tabelaryczna), `tests/test_ablation.py`, generowany `docs/experiments.md`.
 **Zadania**
 
-- [ ] definicje 5 grup ablacji z §11.1 (`rnn`, `window`, `aug`, `pretrained`, `pool`).
-- [ ] run referencyjny + warianty; każdy dziedziczy seed, split i resztę configu.
-- [ ] `ablation_<group>.json`: lista `run_id` i **dokładnie jedna** różnica w configu względem referencji.
-- [ ] `report`: tabela z `runs/index.csv` → `docs/experiments.md` (nagłówek „generowane, nie edytuj ręcznie”).
-- [ ] `--smoke` jako uczciwy fallback przy braku GPU; oznaczenie w tabeli, które wiersze są syntetyczne.
+- [x] definicje 5 grup ablacji z §11.1 (`rnn`, `window`, `aug`, `pretrained`, `pool`).
+- [x] run referencyjny + warianty; każdy dziedziczy seed, split i resztę configu.
+- [x] `ablation_<group>.json`: lista `run_id` i **dokładnie jedna** różnica w configu względem referencji.
+- [x] `report`: tabela z `runs/index.csv` → `docs/experiments.md` (nagłówek „generowane, nie edytuj ręcznie”).
+- [x] `--smoke` jako uczciwy fallback przy braku GPU; oznaczenie w tabeli, które wiersze są syntetyczne.
 
 **Bramka**
 
@@ -826,6 +826,17 @@ bird_recognizer report --runs <ref> <variant> --out docs/experiments.md
 - Test „jedna różnica w configu” zielony dla każdej grupy.
 - Tabela w `docs/experiments.md` powstaje z ≥ 3 runów i zgadza się z `index.csv` (test).
 - Każda grupa ma run referencyjny; grupa bez pełnych danych jest oznaczona, nie pominięta po cichu.
+
+**Stan po etapie 6 (2026-11-21):** `ablation.py` definiuje 5 grup; referencją grupy jest jej pierwszy
+wariant, a `diff` w `runs/ablation_<group>.json` pokazuje **jedną** zmienioną dźwignię
+(`architecture` | `window_s` | `aug`). `report` generuje `docs/experiments.md` z `runs/index.csv`
+i zostawia sekcję „Wnioski” człowiekowi. Bramka przeszła: 226 testów, `ablate --group rnn --smoke`
+(3 runy na realnym podzbiorze, 2 nagrania/gatunek) i `report` (3 runy). **Środowisko:** zainstalowany
+`torch 2.15.0+cu132` (RTX 5070 12 GB, CUDA 13.2; wcześniej build CPU-only) — patrz dziennik,
+odstępstwo 35. Grupa `window` wymaga cache dla innej geometrii okna: `ablate` tworzy
+`data/window5`/`data/window10` na twardych linkach do `data/raw` i buduje cache na żądanie.
+Wiersze ze `smoke` w `docs/experiments.md` są techniczne, nie są wynikami badania; pełne runy
+macierzy są dokładane po etapie 6 i opisane w dzienniku.
 
 **Commit:** `feat(ablation): single-variable experiment matrix` · **Dziennik:** co udało się policzyć, a co wymagało GPU.
 **Stop, jeśli:** pełna macierz nie mieści się w czasie → uruchom `rnn` i `pretrained`, resztę oznacz w README jako nieprzebadaną. Nie wymyślaj wyników.

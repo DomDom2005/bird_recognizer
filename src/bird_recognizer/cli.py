@@ -7,13 +7,14 @@ import logging
 import sys
 import time
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import joblib
 import numpy as np
 import torch
 
+from . import ablation
 from .config import DEFAULT_CONFIG_PATH, Config, TrainingConfig, get_api_key, load_config
 from .data.dataset import (
     WindowDataset,
@@ -23,13 +24,14 @@ from .data.dataset import (
     verify_cache,
 )
 from .data.splits import load_splits, make_and_save, splits_path
-from .errors import AppError, DataError
+from .errors import AppError, DataError, ModelError
 from .eval.metrics import accuracy, aggregate_by_group, macro_f1, top_k_accuracy
+from .eval.report import select_rows, write_report
 from .logging_setup import configure_console, setup_logging
 from .models.mfcc_baseline import MFCCBaseline, features_from_refs
 from .models_registry import build_model
 from .train.loop import set_seed, train_model
-from .train.runner import Run, base_index_row
+from .train.runner import Run, base_index_row, load_index
 from .xc.catalog import build_catalog, catalog_path
 from .xc.client import XCClient
 from .xc.download import download_audio
@@ -148,6 +150,30 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=argparse.SUPPRESS,
         help="szybki przebieg na podzbiorze (także po podkomendzie)",
+    )
+
+    ablate = sub.add_parser("ablate", help="macierz ablacji jednoczynnikowych")
+    ablate.add_argument("--group", choices=list(ablation.GROUPS), required=True)
+    ablate.add_argument("--epochs", type=int, default=None, help="nadpisz budżet epok")
+    ablate.add_argument(
+        "--smoke",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="szybki przebieg na podzbiorze (także po podkomendzie)",
+    )
+
+    report = sub.add_parser("report", help="tabela wyników z runs/index.csv")
+    report.add_argument(
+        "--runs",
+        nargs="+",
+        required=True,
+        help="run_id z runs/index.csv; pierwszy jest referencją dla Δ",
+    )
+    report.add_argument(
+        "--out",
+        type=Path,
+        default=Path("docs/experiments.md"),
+        help="wyjściowy plik Markdown (domyślnie docs/experiments.md)",
     )
 
     return parser
@@ -291,8 +317,9 @@ def _require_plan(data_dir: Path):
     return load_splits(path)
 
 
-def _split_refs(config: Config, limit: int | None) -> dict[str, list]:
-    data_dir = config.paths.data_dir
+def _split_refs(
+    config: Config, data_dir: Path, limit: int | None
+) -> dict[str, list]:
     return {
         split: build_window_index(
             config, data_dir, split=split, limit_per_species=limit
@@ -380,7 +407,7 @@ def _cmd_train_mfcc(config: Config, args: argparse.Namespace) -> int:
     data_dir = config.paths.data_dir
     _require_plan(data_dir)
     limit = SMOKE_LIMIT_PER_SPECIES if args.smoke else None
-    refs = _split_refs(config, limit)
+    refs = _split_refs(config, data_dir, limit)
     if not refs["train"] or not refs["val"]:
         raise DataError(
             "brak okien w train/val — uruchom `bird_recognizer prep cache`"
@@ -478,22 +505,34 @@ def _neural_training(
     return training
 
 
-def _cmd_train_neural(
+@dataclass
+class NeuralRun:
+    """Outcome of one training run, enough for CLI printing and ablation records."""
+
+    run: Run
+    parameters: int
+    epochs_run: int
+    duration_s: float
+    val_metrics: dict[str, float]
+    test_metrics: dict[str, float] | None
+
+
+def run_neural(
     config: Config,
-    args: argparse.Namespace,
+    data_dir: Path,
     *,
+    device: torch.device,
     model_name: str,
     tag: str = "",
     options: dict[str, object] | None = None,
     training: TrainingConfig | None = None,
     notes: str = "",
-) -> int:
-    """One neural run: cnn, crnn or transfer (SPEC FR-6/7/8, §10.5)."""
-    data_dir = config.paths.data_dir
+    smoke: bool = False,
+    limit_per_species: int | None = None,
+) -> NeuralRun:
+    """Train one registered model end-to-end and write its run directory (FR-9)."""
     _require_plan(data_dir)
-    device = _resolve_device(args)
-    limit = SMOKE_LIMIT_PER_SPECIES if args.smoke else None
-    refs = _split_refs(config, limit)
+    refs = _split_refs(config, data_dir, limit_per_species)
     if not refs["train"] or not refs["val"]:
         raise DataError(
             "brak okien w train/val — uruchom `bird_recognizer prep cache`"
@@ -506,15 +545,13 @@ def _cmd_train_neural(
         if refs["test"]
         else None
     )
-    if getattr(args, "aug", None):
-        config = replace(config, augment=replace(config.augment, preset=args.aug))
     run_config = replace(
         config, training=training if training is not None else config.training
     )
     # Model weights must be drawn after seeding, otherwise two runs with the same
     # config produce different initialisations (caught in the stage-4 gate).
     set_seed(config.seed)
-    model = build_model(model_name, len(config.species), **(options or {}))
+    model = build_model(model_name, len(config.species), **(options or {})).to(device)
     run = Run.create(run_config, model=model_name, tag=tag, device=str(device))
     run.record_parameters(sum(parameter.numel() for parameter in model.parameters()))
     started = time.perf_counter()
@@ -539,7 +576,9 @@ def _cmd_train_neural(
             "val": val_metrics,
             "test": test_metrics,
             "duration_s": round(duration, 2),
-            "smoke": bool(args.smoke),
+            "data_dir": str(data_dir),
+            "limit_per_species": limit_per_species,
+            "smoke": bool(smoke),
         }
     )
     row = base_index_row(
@@ -547,7 +586,7 @@ def _cmd_train_neural(
         run_config,
         pretrained="imagenet" if (options or {}).get("pretrained") else "none",
         pool=str((options or {}).get("pool", "")),
-        aug=config.augment.preset,
+        aug=run_config.augment.preset,
         n_train=len(refs["train"]),
         n_val=len(refs["val"]),
         n_test=len(refs["test"]),
@@ -560,30 +599,65 @@ def _cmd_train_neural(
             else ""
         ),
         duration_s=round(duration, 2),
-        notes="; ".join(part for part in (notes, "smoke" if args.smoke else "") if part),
+        notes="; ".join(part for part in (notes, "smoke" if smoke else "") if part),
     )
     run.append_index(row)
-    label = model_name.upper() + (f" ({tag})" if tag else "")
-    print(
-        f"{label}: run={run.run_id} ({result.parameters} parametrów, "
-        f"{len(result.history)} epok, {duration:.1f} s, device={device})"
+    return NeuralRun(
+        run=run,
+        parameters=result.parameters,
+        epochs_run=len(result.history),
+        duration_s=duration,
+        val_metrics=val_metrics,
+        test_metrics=test_metrics,
     )
-    if result.history:
-        print(
-            f"  best: epoka {result.best_epoch}, "
-            f"val window macro-F1={result.best_val_macro_f1:.3f}"
-        )
+
+
+def _print_run(label: str, result: NeuralRun, device: torch.device) -> None:
     print(
-        f"  val: recording macro-F1={_fmt(val_metrics['recording_macro_f1'])} "
-        f"top1={_fmt(val_metrics['recording_top1'])} "
-        f"top3={_fmt(val_metrics['recording_top3'])}"
+        f"{label}: run={result.run.run_id} ({result.parameters} parametrów, "
+        f"{result.epochs_run} epok, {result.duration_s:.1f} s, device={device})"
     )
-    if test_metrics:
+    print(
+        f"  val: recording macro-F1={_fmt(result.val_metrics['recording_macro_f1'])} "
+        f"top1={_fmt(result.val_metrics['recording_top1'])} "
+        f"top3={_fmt(result.val_metrics['recording_top3'])}"
+    )
+    if result.test_metrics:
         print(
-            f"  test: recording macro-F1={_fmt(test_metrics['recording_macro_f1'])} "
-            f"top1={_fmt(test_metrics['recording_top1'])} "
-            f"top3={_fmt(test_metrics['recording_top3'])}"
+            f"  test: recording macro-F1={_fmt(result.test_metrics['recording_macro_f1'])} "
+            f"top1={_fmt(result.test_metrics['recording_top1'])} "
+            f"top3={_fmt(result.test_metrics['recording_top3'])}"
         )
+
+
+def _cmd_train_neural(
+    config: Config,
+    args: argparse.Namespace,
+    *,
+    model_name: str,
+    tag: str = "",
+    options: dict[str, object] | None = None,
+    training: TrainingConfig | None = None,
+    notes: str = "",
+) -> int:
+    """One neural run: cnn, crnn or transfer (SPEC FR-6/7/8, §10.5)."""
+    device = _resolve_device(args)
+    if getattr(args, "aug", None):
+        config = replace(config, augment=replace(config.augment, preset=args.aug))
+    limit = SMOKE_LIMIT_PER_SPECIES if args.smoke else None
+    result = run_neural(
+        config,
+        config.paths.data_dir,
+        device=device,
+        model_name=model_name,
+        tag=tag,
+        options=options,
+        training=training,
+        notes=notes,
+        smoke=bool(args.smoke),
+        limit_per_species=limit,
+    )
+    _print_run(model_name.upper() + (f" ({tag})" if tag else ""), result, device)
     return 0
 
 
@@ -623,6 +697,111 @@ def _cmd_train_transfer(config: Config, args: argparse.Namespace) -> int:
     )
 
 
+def _ablation_training(config: Config, args: argparse.Namespace) -> TrainingConfig:
+    """One shared budget for every arm: same seed, split, epochs and lr (FR-11)."""
+    training = config.training
+    if args.smoke:
+        return replace(training, epochs=1)
+    if args.epochs is not None:
+        return replace(training, epochs=args.epochs)
+    return training
+
+
+def _row_float(row: dict[str, str], key: str) -> float | None:
+    try:
+        return float(row.get(key, ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def _cmd_ablate(config: Config, args: argparse.Namespace) -> int:
+    """Run one ablation group: reference + variants, each as a separate run (FR-11)."""
+    group = args.group
+    ablation.validate_groups()
+    device = _resolve_device(args)
+    training = _ablation_training(config, args)
+    limit = SMOKE_LIMIT_PER_SPECIES if args.smoke else None
+    base_dir = config.paths.data_dir
+    records: list[dict[str, object]] = []
+    window_dirs: dict[str, str] = {}
+    print(f"Ablacja [{group}]: {ablation.GROUP_TITLES[group]}")
+    for variant in ablation.GROUPS[group]:
+        run_config = ablation.config_for_variant(config, variant)
+        data_dir = base_dir
+        try:
+            if variant.window_s != config.audio.window_s:
+                data_dir = ablation.ensure_window_cache(config, variant.window_s, base_dir)
+                window_dirs[f"{variant.window_s:g}s"] = str(data_dir)
+            result = run_neural(
+                run_config,
+                data_dir,
+                device=device,
+                model_name=variant.model,
+                tag=ablation.variant_tag(group, variant),
+                options=variant.options,
+                training=training,
+                notes=f"{group}:{variant.label}",
+                smoke=bool(args.smoke),
+                limit_per_species=limit,
+            )
+        except (DataError, ModelError) as exc:
+            records.append(
+                ablation.run_record(
+                    variant, group=group, status="missing", reason=str(exc)
+                )
+            )
+            print(f"  UWAGA {variant.label}: pominięty — {exc}")
+            continue
+        test_f1 = (result.test_metrics or {}).get("recording_macro_f1")
+        records.append(
+            ablation.run_record(
+                variant,
+                group=group,
+                status="ok",
+                run_id=result.run.run_id,
+                metrics={
+                    "val_macro_f1": result.val_metrics["recording_macro_f1"],
+                    "test_macro_f1": test_f1,
+                },
+            )
+        )
+        print(
+            f"  {variant.label}: run={result.run.run_id} "
+            f"test macro-F1={_fmt(test_f1)} ({result.duration_s:.1f} s)"
+        )
+    payload = ablation.payload(
+        group,
+        records,
+        smoke=bool(args.smoke),
+        epochs=training.epochs,
+        device=str(device),
+        window_data_dirs=window_dirs,
+    )
+    path = ablation.write_ablation(config.paths.runs_dir, payload)
+    finished = sum(1 for record in records if record["status"] == "ok")
+    print(f"Ablacja {group}: {finished}/{len(records)} runów; definicja -> {path}")
+    return 0 if finished else 3
+
+
+def _cmd_report(config: Config, args: argparse.Namespace) -> int:
+    """Generate the Markdown results table from ``runs/index.csv`` (FR-14)."""
+    rows = load_index(config.paths.runs_dir)
+    if not rows:
+        raise DataError(
+            f"brak wpisów w {config.paths.runs_dir / 'index.csv'} — najpierw wytrenuj model"
+        )
+    selected = select_rows(rows, args.runs)
+    path = write_report(args.out, selected, reference_id=selected[0]["run_id"])
+    print(f"Raport: {len(selected)} runów -> {path}")
+    for row in selected:
+        print(
+            f"  {row['run_id']}: test macro-F1="
+            f"{_fmt(_row_float(row, 'test_macro_f1'))}, "
+            f"val macro-F1={_fmt(_row_float(row, 'val_macro_f1'))}"
+        )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; maps :class:`AppError` to the exit codes from SPEC §8."""
     configure_console()
@@ -641,6 +820,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _cmd_split(config, args)
         if args.command == "prep" and args.prep_command == "cache":
             return _cmd_cache(config, args)
+        if args.command == "ablate":
+            return _cmd_ablate(config, args)
+        if args.command == "report":
+            return _cmd_report(config, args)
         if args.command == "train":
             if args.train_command == "mfcc":
                 return _cmd_train_mfcc(config, args)

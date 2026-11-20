@@ -23,6 +23,8 @@ bird_recognizer train mfcc --smoke && bird_recognizer train cnn --smoke
 bird_recognizer train crnn --pool attention --smoke
 bird_recognizer train transfer --arch resnet18 --scratch --smoke   # bez sieci
 bird_recognizer train transfer --arch resnet18 --smoke            # wagi ImageNet (raz, sieć)
+bird_recognizer ablate --group rnn --smoke
+bird_recognizer report --runs RUN1 RUN2 RUN3 --out docs/experiments.md
 bird_recognizer eval --run RUN --split test
 bird_recognizer demo --run RUN
 ```
@@ -73,6 +75,16 @@ używaj równoważnej formy `python -m bird_recognizer.cli <komenda>`.
 - Augmentacja `full` = przesunięcie + szum + SpecAugment (per okno) + mixup (batch treningowy).
   Na znormalizowanym mel zero w masce to średnia pasma, a mixup miesza **tylko** batch treningowy;
   walidacja i test zostają czyste — to warunek porównywalności runów.
+- **Ablacja to jedna dźwignia na grupę** (`architecture` | `window_s` | `aug`). W grupie `pretrained`
+  obie gałęzie uczą się z tym samym `lr`, bo zmiana `lr` byłaby drugą zmianą; w grupie `window`
+  `n` okien różni się z definicji — porównuj F1, nie `n`. Definicję grupy trzymaj w `ablation.py`,
+  a wynikowy `runs/ablation_<grupa>.json` jest dowodem różnicy.
+- Grupa `window` potrzebuje cache dla innej geometrii okna. `ablate` sam tworzy `data/window5`
+  i `data/window10` (twarde linki do `data/raw`, kopia `catalog.jsonl` i `splits.json`) i buduje
+  cache — nie rób tego ręcznie i nie commituj tych katalogów.
+- **GPU:** `requirements.txt` pinuje `torch==2.15.0+cu132`; urządzenie wybiera się automatycznie,
+  `--device cpu` wymusza CPU (testy CLI używają CPU, żeby były szybkie i powtarzalne). Wyniki
+  GPU mogą różnić się od CPU mimo seeda — raportuj `device`, nie obiecuj powtarzalności.
 - `data/cache` jest w pełni odtwarzalny z `data/raw`; usunięcie cache nie traci danych.
 - Windows: `DataLoader` z `num_workers>0` wymaga `if __name__ == "__main__"` w skryptach
   startowych; przy problemach zacznij od `num_workers=0`.

@@ -4,9 +4,9 @@ Klasyfikacja gatunku ptaka z nagrania: mel-spektrogramy, CNN, transfer wiedzy i 
 Projekt badawczy (studia AI), pytanie: **ile daje modelowanie czasu w porównaniu z modelem,
 który patrzy na spektrogram okna bez rekurencji?**
 
-> **Status: etap 5 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, baseline MFCC+SVM,
-> mały CNN oraz modele główne (transfer i CRNN) są gotowe; ablacje w etapie 6, ewaluacja w 7,
-> demo i raport w etapie 8.
+> **Status: etap 6 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, baseline, modele główne
+> oraz macierz ablacji i generator tabeli wyników są gotowe; pełne runy macierzy dochodzą po
+> etapie 6, ewaluacja i analiza błędów w etapie 7, demo i raport w etapie 8.
 
 ## 1. Cel i pytanie badawcze
 
@@ -41,14 +41,18 @@ Diagram Mermaid i opis katalogów: [`docs/data-flow.md`](docs/data-flow.md).
 
 ## 4. Instrukcja uruchomienia
 
-Wymagania: Python 3.11+ (testowane na 3.14.6), pip, ffmpeg (dekodowanie mp3).
+Wymagania: Python 3.11+ (testowane na 3.14.6), pip, ffmpeg (dekodowanie mp3), GPU NVIDIA do
+pełnych runów (testowane na RTX 5070 12 GB, CUDA 13.2; bez GPU wszystko działa na CPU, tylko wolniej).
 
 ```bash
 python -m venv .venv
 .venv\Scripts\activate                # Windows; Linux/macOS: source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cu132
 pip install -e .
 ```
+
+`requirements.txt` przypina `torch==2.15.0+cu132` (build CUDA); na maszynie bez GPU zainstaluj
+`torch==2.15.0` z PyPI albo pomiń `--extra-index-url` i popraw pin.
 
 Klucz API: skopiuj `.env.example` do `.env` i wpisz klucz xeno-canto. Kod czyta
 `BIRD_XC_API_KEY`, a także starszy alias `xc_api_key` (patrz `docs/ai-journal.md`).
@@ -84,6 +88,17 @@ bird_recognizer --smoke train cnn       # szybki podzbiór (2 nagrania/gatunek, 
 `train transfer` bez `--scratch` używa wag ImageNet (dociągane raz do `~/.cache/torch`;
 gdy ten katalog jest niezapisywalny, wskaż inny przez `TORCH_HOME`).
 
+Ablacje i tabela wyników (etap 6):
+
+```bash
+bird_recognizer ablate --group rnn --smoke     # macierz jednoczynnikowa (5 grup)
+bird_recognizer report --runs RUN1 RUN2 RUN3 --out docs/experiments.md
+```
+
+Każdy run macierzy to osobny katalog w `runs/`; definicja grupy (run referencyjny i różnice)
+ląduje w `runs/ablation_<grupa>.json`. `report` generuje `docs/experiments.md` z `runs/index.csv`,
+a sekcję „Wnioski” uzupełnia człowiek.
+
 Każdy przebieg zapisuje `runs/<run_id>/{config.yaml, env.txt, metrics.json, metrics.jsonl,
 best.pt | model.joblib}` i dopisuje wiersz do `runs/index.csv`.
 
@@ -91,7 +106,7 @@ Jeśli komenda `bird_recognizer` nie jest w PATH (tak jest na części instalacj
 gdzie `pip` instaluje skrypty do katalogu spoza PATH), użyj równoważnej formy
 `python -m bird_recognizer.cli …`.
 
-Kolejne kroki (etapy 6–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
+Kolejne kroki (etapy 7–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
 
 ## 5. Tryb bez internetu
 
@@ -104,11 +119,11 @@ Kolejne kroki (etapy 6–8) opisuje `project info/SPEC.md` §15: karta etapu = z
 
 ## 6. Wyniki
 
-Dla etapu 5: brak wyników badawczych — smoke runy służą tylko sprawdzeniu pipeline'u
-(CNN: 391 404 parametry, 1 epoka ≈ 23 s CPU; CRNN: 1 212 396 parametrów, 1 epoka ≈ 21 s CPU;
-ResNet18: 11 176 396 parametrów, 1 epoka ≈ 28 s CPU). Dwa przebiegi CRNN z tym samym seedem
-dają identyczne metryki. Tabela ablacji powstanie w `docs/experiments.md` generowanym
-z `runs/index.csv` (etap 6). Wnioski badawcze dopisuje człowiek.
+Dla etapu 6: `docs/experiments.md` jest generowane z `runs/index.csv`, ale tabela pochodzi
+z przebiegów `--smoke` na realnym podzbiorze (2 nagrania/gatunek) — wiersze mają `smoke` w uwagach,
+więc **nie są wynikami badania**. Pełne runy macierzy (5 grup, GPU RTX 5070) są dokładane po etapie 6;
+każdy run zapisuje `config.yaml`, seed, urządzenie i `git_sha`. Wnioski badawcze dopisuje człowiek
+w sekcji 5 pliku.
 
 ## 7. Testy
 
@@ -118,10 +133,11 @@ ruff check .
 pytest --cov=bird_recognizer.models --cov=bird_recognizer.train   # pokrycie etapu 4
 ```
 
-Stan: **203 testy**; pokrycie `models/` 83–100%, `train/` 93–100% (razem 93%), `data/`
-88–100%, `xc/` 90–94%. Zakres: konfiguracja, redakcja sekretów, blokada sieci, klient API,
-katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache, modele (CNN, CRNN, transfer),
-augmentacje (basic i full: SpecAugment + mixup), pętla treningu, metryki, runner i CLI.
+Stan: **226 testów**; pokrycie całości 91% (`models/` 83–100%, `train/` 93–100%, `ablation.py` 90%,
+`eval/report.py` 91%, `data/` 88–100%, `xc/` 90–94%). Zakres: konfiguracja, redakcja sekretów,
+blokada sieci, klient API, katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache,
+modele (CNN, CRNN, transfer), augmentacje (basic i full), pętla treningu, metryki, runner, CLI,
+macierz ablacji (reguła jednej zmiany, JSON, twarde linki okien) i generator raportu.
 
 ## 8. Struktura repo
 
@@ -129,12 +145,12 @@ augmentacje (basic i full: SpecAugment + mixup), pętla treningu, metryki, runne
 bird_recognizer/
 ├── project info/          # SPEC.md, PLAN.md, AGENTS.md
 ├── configs/               # default.yaml (progi), species.yaml (12 gatunków)
-├── src/bird_recognizer/   # config, errors, logging_setup, cli, models_registry
+├── src/bird_recognizer/   # config, errors, logging_setup, cli, models_registry, ablation
 │   ├── xc/                # client, catalog, download
 │   ├── data/              # splits, audio, windows, spectrogram, dataset (cache)
 │   ├── models/            # cnn, crnn, transfer, mfcc_baseline
 │   ├── train/             # augment (basic/full), loop, runner
-│   └── eval/              # metrics (etap 6: report; etap 7: error analysis)
+│   └── eval/              # metrics, report (tabela wyników, etap 7: error analysis)
 ├── scripts/               # probe_api.py, check_leakage.py
 ├── tests/                 # + fixtures/api, fixtures/synthetic_data, support.py (WAV-y)
 ├── docs/                  # api-notes, ai-journal, data-flow, manual-checklist

@@ -129,6 +129,8 @@ class CRNN(nn.Module):
         sequence = features.permute(0, 3, 1, 2).reshape(batch, steps, channels * freq)
         sequence, _ = self.sequence(self.project(sequence))
         sequence = self.dropout(sequence)
+        if lengths is not None:
+            lengths = torch.as_tensor(lengths, device=sequence.device)
         mask = frames_mask(lengths, steps) if lengths is not None else None
         return self.classifier(self.pool(sequence, mask))
 

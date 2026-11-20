@@ -18,6 +18,8 @@
 | 2026-11-20 | 5 | `models/transfer.py` (ResNet18/EfficientNet-B0, 1-kanałowa pierwsza konwolucja, nowa głowica, `--pretrained|--scratch`), `models/crnn.py` (backbone z etapu 4 → BiGRU → pooling `mean`/`attention` z maską długości), `train/augment.py` wariant `full` (SpecAugment + mixup), rejestr z opcjami modelu, CLI `train crnn`/`train transfer`, `WindowDataset(with_lengths=True)`, pętla treningu z maską i mixupem | bramka etapu 5: `ruff check .` czysty, **203 testy** (14,9 s), pokrycie `models/` 83–100% (crnn 97%, transfer 91%), `train/` 93–100% (augment 100%), `train crnn --smoke` i `train transfer --arch resnet18 --scratch --smoke` exit 0 | trafne po korekcie konstrukcji poolingu (patrz odstępstwo 29) |
 | 2026-11-20 | 5 | pomiar na realnym podzbiorze: CRNN **1 212 396** parametrów, 1 epoka ≈ 21 s CPU; ResNet18 **11 176 396** parametrów, ≈ 28 s; ponowny `train crnn --smoke` dał identyczne metryki (determinizm); `train cnn --smoke` nadal 0,190 (brak regresji etapu 4) | `runs/index.csv` z nowymi wierszami: `crnn-mean`, `transfer-resnet18-scratch`, `transfer-resnet18-pretrained`; `env.txt` ma `model_parameters` | trafne |
 | 2026-11-20 | 5 | dokończone pobieranie całego zbioru (2917/2917, 0 błędów, 0 zredagowanych, 969 pominiętych przy wznowieniu w dwóch przebiegach) i przebudowa cache: 2897 nagrań, 131 900/151 115 okien (12,7% odrzuconych), 3755,7 min audio, 6,06 GB; 1 duplikat audio `1052072`=`1052075` (oba w train) | `prep cache --verify` → „Cache OK (2897 nagrań)”; `check_leakage.py` exit 0 (brak wspólnych id/rec/sha256); 20 nagrań bez cache: 19 `empty_after_gating` + 1 błąd dekodowania, 0 w test | trafne; pomiar trafił do SPEC §7.4 i §10.2 |
+| 2026-11-21 | 6 | `ablation.py` (5 grup, jedna dźwignia na grupę, `runs/ablation_<grupa>.json`), `eval/report.py` (tabela z `index.csv`, sekcje etapu 7 jako placeholdery), CLI `ablate`/`report`, refaktor `run_neural` (wspólny dla `train` i `ablate`), cache okien 5 s/10 s na twardych linkach, instalacja `torch 2.15.0+cu132` | bramka etapu 6: `ruff check .` czysty, **226 testów**, `ablate --group rnn --smoke` → 3/3 runy, `report` → `docs/experiments.md` z 3 runów, test „jedna różnica w configu” zielony dla 5 grup | trafne po naprawie urządzenia modelu (odstępstwa 35–36) |
+| 2026-11-21 | 6 | pomiar GPU: CRNN `--smoke` 1 epoka 1,6 s (cuda) vs 12 s (cpu); testy CLI wymuszają `--device cpu`, żeby nie zależeć od GPU; cache 5 s i 10 s budowany w tle pod grupę `window` | `train crnn --smoke` → `device=cuda`; wiersze `docs/experiments.md` mają `smoke` w uwagach; pełne runy macierzy dochodzą po etapie 6 (dziennik niżej) | trafne |
 
 ## Odstępstwa od SPEC
 
@@ -166,6 +168,32 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     zaktualizowane.
 34. **`train_cnn` → `train_model`.** Pętla obsługuje trzy rodziny modeli, więc nazwa została
     zmieniona; alias `train_cnn` zostaje dla zgodności. CLI i testy używają nowej nazwy.
+35. **Środowisko GPU (etap 6).** W maszynie jest RTX 5070 12 GB (driver 610.60, CUDA 13.2/13.3),
+    ale zainstalowany `torch` był buildem CPU-only. Kół `2.15.0` **nie ma** na indeksach cu128
+    i cu130 (maks. 2.11.0 / 2.14.1); jest na cu132. Instalacja: `pip install --no-deps
+    "torch==2.15.0+cu132" --index-url https://download.pytorch.org/whl/cu132`. `torchvision`
+    i `torchaudio` zostały buildami CPU (wystarczają: definiują modele i robią resampling).
+    `requirements.txt` przypina teraz `torch==2.15.0+cu132` i podaje `--extra-index-url`;
+    testy CLI wymuszają `--device cpu`, żeby nie zależeć od GPU. Pomiar: CRNN `--smoke`
+    1 epoka 1,6 s na CUDA vs 12 s na CPU.
+36. **Model nie był przenoszony na urządzenie (błąd złapany po instalacji CUDA).** `_resolve_device`
+    zwracało `cuda`, a `run_neural` budował model na CPU → `RuntimeError: Input type
+    (torch.cuda.FloatTensor) and weight type (torch.FloatTensor)`. Naprawa: `.to(device)`
+    w `run_neural` oraz przenoszenie `lengths`/maski na urządzenie sekwencji w CRNN. Wniosek:
+    zmiana środowiska (CPU → GPU) musi przejść **całą** bramkę, bo ujawnia błędy niewidoczne na CPU.
+37. **Ablacja okna wymaga osobnego cache.** `data/window5` i `data/window10` powstają przez
+    twarde linki do `data/raw` (`os.link`, bez kopiowania 8 GB) + kopię `catalog.jsonl`
+    i `splits.json`; `ablate` buduje cache na żądanie (`ensure_window_cache`), więc grupa `window`
+    nie jest pomijana. Katalogi są poza repo (`/data/` w `.gitignore`).
+38. **Ablacja `pretrained`: ten sam `lr` w obu gałęziach.** SPEC §10.5 sugeruje 3e-4 dla
+    fine-tune, ale w ablacji zmiana `lr` byłaby **drugą** różnicą względem „od zera”. Obie
+    gałęzie uczą się z `lr=1e-3`; zapisane w `note` w `runs/ablation_pretrained.json`.
+39. **`report` zostawia sekcje 3–5 jako placeholdery.** Pary mylące (per-class F1), zbiór własny
+    i „Wnioski” należą do etapu 7 i do człowieka; nagłówek mówi wprost, że tabela jest generowana
+    i że wniosków nie wymyśla agent.
+40. **Smoke w ablacji ma nierówne `n` między podziałami.** `--limit 2` działa per gatunek
+    i per podział, a nagrania mają różne długości, więc wiersze mają np. 762/910/825 okien;
+    są oznaczone `smoke` w uwagach i nie są wynikami badania.
 
 ## Wznowienie po przerwie (2026-11-18)
 

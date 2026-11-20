@@ -1,6 +1,8 @@
 # Runtime dependencies — wersje przypięte po pierwszej udanej instalacji (SPEC §15.6).
-# Środowisko referencyjne: Python 3.14.6, Windows. Instalacja:
-#   pip install -r requirements.txt -r requirements-dev.txt
+# Środowisko referencyjne: Python 3.14.6, Windows, GPU NVIDIA (CUDA 13.2). Instalacja:
+#   pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cu132
+# Bez GPU: zainstaluj torch==2.15.0 z PyPI (build CPU) i pomiń --extra-index-url;
+# torchvision/torchaudio zostają buildami CPU (definicje modeli i resampling).
 numpy==2.5.0
 pandas==3.0.3
 PyYAML==6.0.3
@@ -9,7 +11,7 @@ soundfile==0.14.0
 librosa==1.0.0
 matplotlib==3.11.2
 scikit-learn==1.9.1
-torch==2.15.0
+torch==2.15.0+cu132
 torchaudio==2.11.1
 torchvision==0.29.2
 tqdm==4.70.1
