@@ -15,6 +15,8 @@
 | 2026-11-20 | 3 | pomiar na żywych nagraniach: 22/24 przetworzone, 2 odrzucone przez `abs_floor`, 521/640 okien (18,6% odpadło), 15,8 min audio, cache 24 MB | `--verify` OK, dwa przebiegi dają identyczne `mel.npy` | trafne; rozmiar cache okazał się ~3× większy niż szacunek SPEC |
 | 2026-11-20 | 4 | `models/cnn.py` (4 bloki, 391 404 param.), `models_registry.py`, `models/mfcc_baseline.py` (MFCC+SVM/RF, cechy z tych samych okien co cache), `train/{augment,loop,runner}.py`, `eval/metrics.py` (potrzebne do early stoppingu), CLI `train mfcc/cnn`, `--smoke`, `--runs-dir`, `--epochs`, cache rozszerzony do 801 nagrań | bramka etapu 4: `ruff check .` czysty, 170 testów, pokrycie `models/` 83–100% i `train/` 93–100%, oba `--smoke` exit 0, dwa przebiegi CNN z tym samym seedem identyczne | trafne po naprawie determinizmu (odstępstwo 24) |
 | 2026-11-20 | 4 | pomiar na realnym podzbiorze (2 nagrania/gatunek): CNN 1 epoka ≈ 23 s CPU, `--epochs 2` → train loss 1,74 → 0,81; MFCC/SVM < 1 s; runs mają `config.yaml`, `env.txt`, `best.pt`/`model.joblib`, `metrics.jsonl`, wpis w `index.csv` | ponowne uruchomienie identyczne; `runs/index.csv` z 8 przebiegami | trafne |
+| 2026-11-20 | 5 | `models/transfer.py` (ResNet18/EfficientNet-B0, 1-kanałowa pierwsza konwolucja, nowa głowica, `--pretrained|--scratch`), `models/crnn.py` (backbone z etapu 4 → BiGRU → pooling `mean`/`attention` z maską długości), `train/augment.py` wariant `full` (SpecAugment + mixup), rejestr z opcjami modelu, CLI `train crnn`/`train transfer`, `WindowDataset(with_lengths=True)`, pętla treningu z maską i mixupem | bramka etapu 5: `ruff check .` czysty, **203 testy** (14,9 s), pokrycie `models/` 83–100% (crnn 97%, transfer 91%), `train/` 93–100% (augment 100%), `train crnn --smoke` i `train transfer --arch resnet18 --scratch --smoke` exit 0 | trafne po korekcie konstrukcji poolingu (patrz odstępstwo 29) |
+| 2026-11-20 | 5 | pomiar na realnym podzbiorze: CRNN **1 212 396** parametrów, 1 epoka ≈ 21 s CPU; ResNet18 **11 176 396** parametrów, ≈ 28 s; ponowny `train crnn --smoke` dał identyczne metryki (determinizm); `train cnn --smoke` nadal 0,190 (brak regresji etapu 4) | `runs/index.csv` z nowymi wierszami: `crnn-mean`, `transfer-resnet18-scratch`, `transfer-resnet18-pretrained`; `env.txt` ma `model_parameters` | trafne |
 
 ## Odstępstwa od SPEC
 
@@ -130,6 +132,39 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     pole. Na pełnych 12 klasach top-3 liczy się normalnie.
 27. **Dodatkowe flagi CLI:** `--runs-dir` (był w SPEC §8, brakowało go w parserze) i `--epochs`
     w `train cnn` (dev, do sprawdzenia spadku lossu na podzbiorze; SPEC §8 zaktualizowane).
+28. **Transfer: wybór wejścia 1-kanałowego.** SPEC FR-8 dopuszczał replikację mel do 3 kanałów
+    albo pierwszą konwolucję z 1 kanałem i kazał zapisać wybór w configu. Wybrano **1-kanałową
+    pierwszą konwolucję**; przy `--pretrained` wagi RGB są **sumowane** (zachowuje energię), nie
+    uśredniane. Nie ma normalizacji ImageNet (mean/std) — cache jest już znormalizowany per okno,
+    a druga normalizacja zmieniłaby statystyki wejścia obiecane w §10.1. Wybór jest w docstringu
+    `transfer.py`, w `metrics.json` (`options`) i w kolumnach `index.csv` (`pretrained`), ale
+    **nie w `config.yaml` runu** — pełny zapis wymaga sekcji `model` w configu; to zadanie dla
+    etapu 6 razem z ablacjami. SPEC §15.10 zaktualizowane.
+29. **Konstrukcja poolingu (błąd złapany przez testy).** `POOLINGS[pool](hidden*2)` przekazywało
+    rozmiar także do `MeanPooling`, który nie ma parametrów → `TypeError` w 6 testach. Naprawa:
+    `MeanPooling()` bez argumentów, `AttentionPooling(hidden*2)`, walidacja nazw w konstruktorze.
+    Testy pokrywają T=188 i T=50, oba poolingi i maskę długości.
+30. **Maska długości trafiła też do `data/dataset.py`.** Karta etapu 5 nie wymienia tego pliku,
+    ale FR-7 wymaga maskowania krótkich okien, a `WindowDataset` zwracał tylko `(mel, label)`.
+    Dodane `WindowRef.valid_frames` (z `meta.json`) i `WindowDataset(with_lengths=True)` →
+    `(mel, label, valid_frames)`; domyślnie nadal 2-krotka, więc starsze wywołania są bez zmian.
+    Pętla treningu rozpoznaje oba kształty batcha.
+31. **„Maskowanie w loss” nie ma zastosowania per ramka.** Klasyfikacja jest per okno (jedna
+    etykieta), więc nie istnieje strata per ramka do maskowania. Maska działa w poolingu `mean`
+    i `attention`: dopełnione ramki nie wchodzą do średniej ani do softmax. SPEC FR-7 mówi
+    o „loss i poolingu” — zapisuję różnicę, żeby nie udawać, że zrobiono coś, czego nie ma.
+32. **Wagi ImageNet w sandboxie DSH.** `~/.cache/torch` leży poza workspace, a zapis jest
+    odrzucany (`WinError 5`), więc pierwsze `--pretrained` padło z czytelnym `ModelError`.
+    Obejście: `TORCH_HOME=data/torch` (dane są poza repo); wagi (44,7 MB) pobrane raz, przebieg
+    `train transfer --arch resnet18 --pretrained --smoke` przeszedł. W zwykłym terminalu
+    właściciela domyślna ścieżka działa bez zmian; pułapka dopisana do AGENTS.
+33. **`--aug` dodane, `--window` odłożone.** SPEC §8 obiecywał `train cnn [--window 3] [--aug …]`.
+    `--aug {none,basic,full}` zaimplementowano teraz dla `cnn`/`crnn`/`transfer` (etap 6 go
+    potrzebuje), z zapisem w `config.yaml` runu i w kolumnie `aug`. `--window` wymaga cache
+    zbudowanego dla innej geometrii okna, więc dochodzi razem z `ablate` w etapie 6; SPEC §8
+    zaktualizowane.
+34. **`train_cnn` → `train_model`.** Pętla obsługuje trzy rodziny modeli, więc nazwa została
+    zmieniona; alias `train_cnn` zostaje dla zgodności. CLI i testy używają nowej nazwy.
 
 ## Wznowienie po przerwie (2026-11-18)
 

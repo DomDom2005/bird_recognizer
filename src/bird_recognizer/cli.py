@@ -14,7 +14,7 @@ import joblib
 import numpy as np
 import torch
 
-from .config import DEFAULT_CONFIG_PATH, Config, get_api_key, load_config
+from .config import DEFAULT_CONFIG_PATH, Config, TrainingConfig, get_api_key, load_config
 from .data.dataset import (
     WindowDataset,
     build_cache,
@@ -28,7 +28,7 @@ from .eval.metrics import accuracy, aggregate_by_group, macro_f1, top_k_accuracy
 from .logging_setup import configure_console, setup_logging
 from .models.mfcc_baseline import MFCCBaseline, features_from_refs
 from .models_registry import build_model
-from .train.loop import set_seed, train_cnn
+from .train.loop import set_seed, train_model
 from .train.runner import Run, base_index_row
 from .xc.catalog import build_catalog, catalog_path
 from .xc.client import XCClient
@@ -94,6 +94,56 @@ def build_parser() -> argparse.ArgumentParser:
     cnn = train_sub.add_parser("cnn", help="mały CNN bez rekurencji")
     cnn.add_argument("--epochs", type=int, default=None, help="nadpisz liczbę epok")
     cnn.add_argument(
+        "--aug",
+        choices=["none", "basic", "full"],
+        default=None,
+        help="wariant augmentacji (domyślnie z configu)",
+    )
+    cnn.add_argument(
+        "--smoke",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="szybki przebieg na podzbiorze (także po podkomendzie)",
+    )
+    crnn = train_sub.add_parser("crnn", help="CRNN: CNN + BiGRU + pooling czasowy")
+    crnn.add_argument("--pool", choices=["mean", "attention"], default="mean")
+    crnn.add_argument("--rnn", choices=["gru", "lstm"], default="gru")
+    crnn.add_argument("--epochs", type=int, default=None, help="nadpisz liczbę epok")
+    crnn.add_argument(
+        "--aug",
+        choices=["none", "basic", "full"],
+        default=None,
+        help="wariant augmentacji (domyślnie z configu)",
+    )
+    crnn.add_argument(
+        "--smoke",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="szybki przebieg na podzbiorze (także po podkomendzie)",
+    )
+    transfer = train_sub.add_parser("transfer", help="transfer: ResNet18 / EfficientNet-B0")
+    transfer.add_argument("--arch", choices=["resnet18", "efficientnet_b0"], default="resnet18")
+    transfer.add_argument(
+        "--pretrained",
+        dest="pretrained",
+        action="store_true",
+        default=True,
+        help="wagi ImageNet (domyślnie)",
+    )
+    transfer.add_argument(
+        "--scratch",
+        dest="pretrained",
+        action="store_false",
+        help="ten sam model bez wag ImageNet (ablacja)",
+    )
+    transfer.add_argument("--epochs", type=int, default=None, help="nadpisz liczbę epok")
+    transfer.add_argument(
+        "--aug",
+        choices=["none", "basic", "full"],
+        default=None,
+        help="wariant augmentacji (domyślnie z configu)",
+    )
+    transfer.add_argument(
         "--smoke",
         action="store_true",
         default=argparse.SUPPRESS,
@@ -288,7 +338,7 @@ def _summarise_predictions(
     }
 
 
-def _cnn_metrics(
+def _model_metrics(
     model: torch.nn.Module,
     dataset: WindowDataset,
     device: torch.device,
@@ -411,7 +461,34 @@ def _cmd_train_mfcc(config: Config, args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_train_cnn(config: Config, args: argparse.Namespace) -> int:
+def _neural_training(
+    config: Config,
+    args: argparse.Namespace,
+    *,
+    finetune: bool = False,
+) -> TrainingConfig:
+    """Training budget for one neural run: transfer fine-tuning, smoke, ``--epochs``."""
+    training = config.training
+    if finetune:
+        training = replace(training, lr=training.lr_finetune, epochs=training.epochs_finetune)
+    if args.smoke:
+        training = replace(training, epochs=1)
+    elif args.epochs is not None:
+        training = replace(training, epochs=args.epochs)
+    return training
+
+
+def _cmd_train_neural(
+    config: Config,
+    args: argparse.Namespace,
+    *,
+    model_name: str,
+    tag: str = "",
+    options: dict[str, object] | None = None,
+    training: TrainingConfig | None = None,
+    notes: str = "",
+) -> int:
+    """One neural run: cnn, crnn or transfer (SPEC FR-6/7/8, §10.5)."""
     data_dir = config.paths.data_dir
     _require_plan(data_dir)
     device = _resolve_device(args)
@@ -422,35 +499,38 @@ def _cmd_train_cnn(config: Config, args: argparse.Namespace) -> int:
             "brak okien w train/val — uruchom `bird_recognizer prep cache`"
         )
 
-    train_ds = WindowDataset(refs["train"])
-    val_ds = WindowDataset(refs["val"], cache_size=8)
-    test_ds = WindowDataset(refs["test"], cache_size=8) if refs["test"] else None
+    train_ds = WindowDataset(refs["train"], with_lengths=True)
+    val_ds = WindowDataset(refs["val"], cache_size=8, with_lengths=True)
+    test_ds = (
+        WindowDataset(refs["test"], cache_size=8, with_lengths=True)
+        if refs["test"]
+        else None
+    )
+    if getattr(args, "aug", None):
+        config = replace(config, augment=replace(config.augment, preset=args.aug))
+    run_config = replace(
+        config, training=training if training is not None else config.training
+    )
     # Model weights must be drawn after seeding, otherwise two runs with the same
     # config produce different initialisations (caught in the stage-4 gate).
     set_seed(config.seed)
-    model = build_model("cnn", len(config.species))
-    run = Run.create(config, model="cnn", device=str(device))
+    model = build_model(model_name, len(config.species), **(options or {}))
+    run = Run.create(run_config, model=model_name, tag=tag, device=str(device))
+    run.record_parameters(sum(parameter.numel() for parameter in model.parameters()))
     started = time.perf_counter()
-    result = train_cnn(
-        model,
-        train_ds,
-        val_ds,
-        config,
-        device,
-        epochs=args.epochs if args.epochs is not None else (1 if args.smoke else None),
-        run=run,
-    )
+    result = train_model(model, train_ds, val_ds, run_config, device, run=run)
     if result.best_state is not None:
         torch.save(result.best_state, run.path("best.pt"))
         model.load_state_dict(result.best_state)
-    val_metrics = _cnn_metrics(model, val_ds, device, len(config.species))
+    val_metrics = _model_metrics(model, val_ds, device, len(config.species))
     test_metrics = (
-        _cnn_metrics(model, test_ds, device, len(config.species)) if test_ds else None
+        _model_metrics(model, test_ds, device, len(config.species)) if test_ds else None
     )
     duration = time.perf_counter() - started
     run.save_metrics(
         {
-            "model": "cnn",
+            "model": model_name,
+            "options": dict(options or {}),
             "parameters": result.parameters,
             "best_epoch": result.best_epoch,
             "best_val_window_macro_f1": round(result.best_val_macro_f1, 6),
@@ -464,8 +544,9 @@ def _cmd_train_cnn(config: Config, args: argparse.Namespace) -> int:
     )
     row = base_index_row(
         run,
-        config,
-        pretrained="none",
+        run_config,
+        pretrained="imagenet" if (options or {}).get("pretrained") else "none",
+        pool=str((options or {}).get("pool", "")),
         aug=config.augment.preset,
         n_train=len(refs["train"]),
         n_val=len(refs["val"]),
@@ -479,11 +560,12 @@ def _cmd_train_cnn(config: Config, args: argparse.Namespace) -> int:
             else ""
         ),
         duration_s=round(duration, 2),
-        notes="smoke" if args.smoke else "",
+        notes="; ".join(part for part in (notes, "smoke" if args.smoke else "") if part),
     )
     run.append_index(row)
+    label = model_name.upper() + (f" ({tag})" if tag else "")
     print(
-        f"CNN: run={run.run_id} ({result.parameters} parametrów, "
+        f"{label}: run={run.run_id} ({result.parameters} parametrów, "
         f"{len(result.history)} epok, {duration:.1f} s, device={device})"
     )
     if result.history:
@@ -503,6 +585,42 @@ def _cmd_train_cnn(config: Config, args: argparse.Namespace) -> int:
             f"top3={_fmt(test_metrics['recording_top3'])}"
         )
     return 0
+
+
+def _cmd_train_cnn(config: Config, args: argparse.Namespace) -> int:
+    return _cmd_train_neural(
+        config,
+        args,
+        model_name="cnn",
+        training=_neural_training(config, args),
+    )
+
+
+def _cmd_train_crnn(config: Config, args: argparse.Namespace) -> int:
+    options = {"pool": args.pool, "rnn": args.rnn, "n_mels": config.spectrogram.n_mels}
+    return _cmd_train_neural(
+        config,
+        args,
+        model_name="crnn",
+        tag=args.pool,
+        options=options,
+        training=_neural_training(config, args),
+        notes=f"rnn={args.rnn}",
+    )
+
+
+def _cmd_train_transfer(config: Config, args: argparse.Namespace) -> int:
+    options = {"arch": args.arch, "pretrained": bool(args.pretrained)}
+    discriminator = "pretrained" if args.pretrained else "scratch"
+    return _cmd_train_neural(
+        config,
+        args,
+        model_name="transfer",
+        tag=f"{args.arch}-{discriminator}",
+        options=options,
+        training=_neural_training(config, args, finetune=bool(args.pretrained)),
+        notes=f"arch={args.arch}",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -528,6 +646,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _cmd_train_mfcc(config, args)
             if args.train_command == "cnn":
                 return _cmd_train_cnn(config, args)
+            if args.train_command == "crnn":
+                return _cmd_train_crnn(config, args)
+            if args.train_command == "transfer":
+                return _cmd_train_transfer(config, args)
         LOGGER.error("Nieznana komenda: %s", args.command)
         return 1
     except AppError as exc:

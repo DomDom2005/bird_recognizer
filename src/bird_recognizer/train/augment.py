@@ -1,22 +1,19 @@
-"""Basic mel augmentations (SPEC §10.3, wariant ``basic``).
+"""Mel augmentations (SPEC §10.3, ``--aug {none,basic,full}``).
 
-Applied to the cached, per-window normalised log-mel frames, so they cannot change
-the global level: ``gain`` would cancel out under normalisation and is therefore
-not implemented yet (see docs/ai-journal.md, odstępstwo 23). Mixup and SpecAugment
-belong to stage 5 (``preset: full`` currently falls back to the basic set).
+Applied to the cached, per-window normalised log-mel frames, so a global ``gain``
+would cancel out under normalisation and is deliberately not implemented (see
+docs/ai-journal.md, odstępstwo 23). ``basic`` is a time shift plus additive noise;
+``full`` adds SpecAugment masks per window and mixup at the batch level (stage 5).
+Validation and test data always stay clean — the training loop is the only caller.
 """
 
 from __future__ import annotations
 
-import logging
-
 import numpy as np
+import torch
+from torch import Tensor
 
 from ..config import AugmentConfig
-
-LOGGER = logging.getLogger(__name__)
-
-_FULL_WARNED = False
 
 
 def shift_time(
@@ -54,6 +51,52 @@ def add_noise(
     return (mel + noise).astype(np.float32)
 
 
+def spec_augment(
+    mel: np.ndarray,
+    config: AugmentConfig,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Zero out frequency bands and time spans of one window (SpecAugment).
+
+    The cache is normalised per window, so zero is the per-band mean — the usual
+    SpecAugment fill value on normalised features. A mask never covers the whole
+    axis: it would erase the window instead of hiding a part of it.
+    """
+    out = mel.copy()
+    n_mels, frames = out.shape
+    for _ in range(config.freq_masks):
+        width = int(rng.integers(1, config.freq_mask_width + 1))
+        if 0 < width < n_mels:
+            start = int(rng.integers(0, n_mels - width + 1))
+            out[start : start + width, :] = 0.0
+    for _ in range(config.time_masks):
+        width = int(rng.integers(1, config.time_mask_width + 1))
+        if 0 < width < frames:
+            start = int(rng.integers(0, frames - width + 1))
+            out[:, start : start + width] = 0.0
+    return out
+
+
+def mixup_batch(
+    inputs: Tensor,
+    labels: Tensor,
+    alpha: float,
+    rng: np.random.Generator,
+) -> tuple[Tensor, Tensor, Tensor, float]:
+    """Mix a training batch with a random permutation of itself (mixup).
+
+    Returns ``(mixed_inputs, targets_a, targets_b, lam)`` so the caller can use the
+    convex combination of two cross-entropies. ``alpha <= 0`` or a batch of one is a
+    no-op (``lam == 1.0``), which keeps the ablation "mixup off" honest.
+    """
+    if alpha <= 0 or inputs.shape[0] < 2:
+        return inputs, labels, labels, 1.0
+    lam = float(rng.beta(alpha, alpha))
+    order = torch.from_numpy(rng.permutation(inputs.shape[0]))
+    mixed = (lam * inputs + (1.0 - lam) * inputs[order]).to(inputs.dtype)
+    return mixed, labels, labels[order], lam
+
+
 def augment_mel(
     mel: np.ndarray,
     config: AugmentConfig,
@@ -62,15 +105,10 @@ def augment_mel(
     frames_per_second: float = 62.5,
 ) -> np.ndarray:
     """Apply the configured augmentation preset to one window."""
-    global _FULL_WARNED
     if config.preset == "none":
         return mel
-    if config.preset == "full" and not _FULL_WARNED:
-        LOGGER.warning(
-            "preset 'full' nie jest jeszcze zaimplementowany (mixup i SpecAugment "
-            "dochodzą w etapie 5) — używam wariantu basic"
-        )
-        _FULL_WARNED = True
     out = shift_time(mel, int(round(config.shift_s * frames_per_second)), rng)
     out = add_noise(out, config.noise_snr_min, config.noise_snr_max, rng)
+    if config.preset == "full":
+        out = spec_augment(out, config, rng)
     return out.astype(np.float32)

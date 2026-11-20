@@ -412,6 +412,8 @@ class WindowRef:
     window: int
     label: int
     species_pl: str
+    #: Valid (non-padded) frames of this window; 0 means "unknown — use the shape".
+    valid_frames: int = 0
 
 
 def build_window_index(
@@ -445,7 +447,9 @@ def build_window_index(
             continue
         per_species[species_pl] += 1
         label = int(labels[species_pl])
+        valid = [int(value) for value in meta.get("valid_frames", [])]
         for window in range(int(meta.get("n_kept") or 0)):
+            frames = valid[window] if window < len(valid) else 0
             refs.append(
                 WindowRef(
                     recording_id=recording_id,
@@ -453,6 +457,7 @@ def build_window_index(
                     window=window,
                     label=label,
                     species_pl=species_pl,
+                    valid_frames=frames,
                 )
             )
     refs.sort(key=lambda ref: (ref.recording_id, ref.window))
@@ -460,27 +465,45 @@ def build_window_index(
 
 
 class WindowDataset:
-    """Map-style dataset over cached windows with a small per-recording LRU cache."""
+    """Map-style dataset over cached windows with a small per-recording LRU cache.
 
-    def __init__(self, refs: list[WindowRef], *, cache_size: int = 16) -> None:
+    With ``with_lengths=True`` each item is ``(mel, label, valid_frames)`` so models
+    that take a per-window length mask (CRNN) can ignore zero-padded tail frames.
+    """
+
+    def __init__(
+        self,
+        refs: list[WindowRef],
+        *,
+        cache_size: int = 16,
+        with_lengths: bool = False,
+    ) -> None:
         if not refs:
             raise DataError("pusta lista okien — sprawdź split, cache i config gatunków")
         self.refs = list(refs)
         self.labels = [ref.label for ref in self.refs]
+        self.with_lengths = with_lengths
         self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
         self._cache_size = max(1, cache_size)
 
     def __len__(self) -> int:
         return len(self.refs)
 
-    def __getitem__(self, index: int) -> tuple[np.ndarray, int]:
+    def __getitem__(
+        self, index: int
+    ) -> tuple[np.ndarray, int] | tuple[np.ndarray, int, int]:
         ref = self.refs[index]
         mel = self._recording(ref.cache_dir, ref.recording_id)
         if ref.window >= mel.shape[0]:
             raise DataError(
                 f"{ref.recording_id}: okno {ref.window} poza cache ({mel.shape[0]})"
             )
-        return mel[ref.window], int(ref.label)
+        window = mel[ref.window]
+        if not self.with_lengths:
+            return window, int(ref.label)
+        frames = window.shape[-1]
+        valid = ref.valid_frames if 0 < ref.valid_frames <= frames else frames
+        return window, int(ref.label), int(valid)
 
     def groups(self) -> list[str]:
         """Recording id of every window, aligned with item order."""

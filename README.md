@@ -4,8 +4,9 @@ Klasyfikacja gatunku ptaka z nagrania: mel-spektrogramy, CNN, transfer wiedzy i 
 Projekt badawczy (studia AI), pytanie: **ile daje modelowanie czasu w porównaniu z modelem,
 który patrzy na spektrogram okna bez rekurencji?**
 
-> **Status: etap 4 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, baseline MFCC+SVM
-> i mały CNN są gotowe; modele główne (transfer, CRNN) i ablacje w etapach 5–6, demo w etapie 8.
+> **Status: etap 5 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, baseline MFCC+SVM,
+> mały CNN oraz modele główne (transfer i CRNN) są gotowe; ablacje w etapie 6, ewaluacja w 7,
+> demo i raport w etapie 8.
 
 ## 1. Cel i pytanie badawcze
 
@@ -70,13 +71,18 @@ bird_recognizer prep cache --limit 24   # okna + log-mel -> data/cache (float16)
 bird_recognizer prep cache --verify     # kontrola config_hash, kształtów i dtype
 ```
 
-Trening baseline'ów (etap 4):
+Trening modeli (etapy 4–5):
 
 ```bash
 bird_recognizer train mfcc --clf svm    # albo --clf rf
 bird_recognizer train cnn               # mały CNN bez rekurencji
+bird_recognizer train crnn --pool attention   # CRNN: CNN + BiGRU + pooling
+bird_recognizer train transfer --arch resnet18 --scratch   # ablacja: bez wag ImageNet
 bird_recognizer --smoke train cnn       # szybki podzbiór (2 nagrania/gatunek, 1 epoka)
 ```
+
+`train transfer` bez `--scratch` używa wag ImageNet (dociągane raz do `~/.cache/torch`;
+gdy ten katalog jest niezapisywalny, wskaż inny przez `TORCH_HOME`).
 
 Każdy przebieg zapisuje `runs/<run_id>/{config.yaml, env.txt, metrics.json, metrics.jsonl,
 best.pt | model.joblib}` i dopisuje wiersz do `runs/index.csv`.
@@ -85,7 +91,7 @@ Jeśli komenda `bird_recognizer` nie jest w PATH (tak jest na części instalacj
 gdzie `pip` instaluje skrypty do katalogu spoza PATH), użyj równoważnej formy
 `python -m bird_recognizer.cli …`.
 
-Kolejne kroki (etapy 5–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
+Kolejne kroki (etapy 6–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
 
 ## 5. Tryb bez internetu
 
@@ -93,13 +99,16 @@ Kolejne kroki (etapy 5–8) opisuje `project info/SPEC.md` §15: karta etapu = z
 - Testy generują własne krótkie WAV-y w `tmp_dir` (`tests/support.py`) — zero sieci i zero
   prawdziwych nagrań w testach. Nie ma osobnego „zbioru syntetycznego”; `--smoke` korzysta
   z realnego katalogu z `--limit`.
+- `--pretrained` w transferze to jedyne miejsce, które potrzebuje sieci (pobranie wag ImageNet,
+  raz); testy podstawiają backbone bez wag, a `--scratch` działa w pełni offline.
 
 ## 6. Wyniki
 
-Dla etapu 4: brak wyników badawczych — smoke runy służą tylko sprawdzeniu pipeline'u
-(CNN: 391 404 parametry, 1 epoka ≈ 23 s CPU; `--epochs 2` daje spadek train loss 1,74 → 0,81).
-Tabela ablacji powstanie w `docs/experiments.md` generowanym z `runs/index.csv` (etap 6).
-Wnioski badawcze dopisuje człowiek.
+Dla etapu 5: brak wyników badawczych — smoke runy służą tylko sprawdzeniu pipeline'u
+(CNN: 391 404 parametry, 1 epoka ≈ 23 s CPU; CRNN: 1 212 396 parametrów, 1 epoka ≈ 21 s CPU;
+ResNet18: 11 176 396 parametrów, 1 epoka ≈ 28 s CPU). Dwa przebiegi CRNN z tym samym seedem
+dają identyczne metryki. Tabela ablacji powstanie w `docs/experiments.md` generowanym
+z `runs/index.csv` (etap 6). Wnioski badawcze dopisuje człowiek.
 
 ## 7. Testy
 
@@ -109,10 +118,10 @@ ruff check .
 pytest --cov=bird_recognizer.models --cov=bird_recognizer.train   # pokrycie etapu 4
 ```
 
-Stan: **170 testów**; pokrycie `models/` 83–100%, `train/` 93–100% (razem 92%), `data/`
+Stan: **203 testy**; pokrycie `models/` 83–100%, `train/` 93–100% (razem 93%), `data/`
 88–100%, `xc/` 90–94%. Zakres: konfiguracja, redakcja sekretów, blokada sieci, klient API,
-katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache, modele, augmentacje,
-pętla treningu, metryki, runner i CLI.
+katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache, modele (CNN, CRNN, transfer),
+augmentacje (basic i full: SpecAugment + mixup), pętla treningu, metryki, runner i CLI.
 
 ## 8. Struktura repo
 
@@ -123,9 +132,9 @@ bird_recognizer/
 ├── src/bird_recognizer/   # config, errors, logging_setup, cli, models_registry
 │   ├── xc/                # client, catalog, download
 │   ├── data/              # splits, audio, windows, spectrogram, dataset (cache)
-│   ├── models/            # cnn, mfcc_baseline
-│   ├── train/             # augment, loop, runner
-│   └── eval/              # metrics (+ etap 5: aggregate, error_analysis)
+│   ├── models/            # cnn, crnn, transfer, mfcc_baseline
+│   ├── train/             # augment (basic/full), loop, runner
+│   └── eval/              # metrics (etap 6: report; etap 7: error analysis)
 ├── scripts/               # probe_api.py, check_leakage.py
 ├── tests/                 # + fixtures/api, fixtures/synthetic_data, support.py (WAV-y)
 ├── docs/                  # api-notes, ai-journal, data-flow, manual-checklist

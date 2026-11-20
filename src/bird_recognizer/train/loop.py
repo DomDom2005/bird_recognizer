@@ -1,7 +1,10 @@
-"""Training loop for the CNN baseline (SPEC FR-9, §10.5).
+"""Training loop for mel-spectrogram classifiers (SPEC FR-9, §10.5).
 
-Class-weighted cross-entropy, gradient clipping, cosine schedule, early stopping on
-validation macro-F1 and the best checkpoint are all driven by ``configs/default.yaml``.
+Works for every registered family (CNN, CRNN, transfer): class-weighted
+cross-entropy, gradient clipping, cosine schedule, early stopping on validation
+macro-F1 and the best checkpoint are driven by ``configs/default.yaml``. Windows may
+carry a valid-length mask (zero-padded tails); models that declare
+``accepts_lengths = True`` receive it and ignore the padding.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from ..config import Config
 from ..data.dataset import WindowDataset
 from ..errors import ModelError
 from ..eval.metrics import aggregate_by_group, macro_f1
-from .augment import augment_mel
+from .augment import augment_mel, mixup_batch
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +68,28 @@ def make_loader(
         num_workers=0,
         generator=generator,
     )
+
+
+def _unpack_batch(
+    batch: Any,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+    """Support datasets with and without the per-window valid-length mask."""
+    if isinstance(batch, (list, tuple)) and len(batch) == 3:
+        inputs, labels, lengths = batch
+        return inputs, labels, lengths
+    inputs, labels = batch
+    return inputs, labels, None
+
+
+def forward_logits(
+    model: nn.Module,
+    inputs: torch.Tensor,
+    lengths: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """Call the model with lengths only when it declares support for them."""
+    if lengths is not None and getattr(model, "accepts_lengths", False):
+        return model(inputs, lengths)
+    return model(inputs)
 
 
 def _augment_batch(batch: torch.Tensor, config: Config, rng: np.random.Generator) -> torch.Tensor:
@@ -125,8 +150,9 @@ def evaluate(
     truths: list[int] = []
     predictions: list[int] = []
     with torch.no_grad():
-        for batch, labels in loader:
-            logits = model(batch.unsqueeze(1).to(device))
+        for batch in loader:
+            inputs, labels, lengths = _unpack_batch(batch)
+            logits = forward_logits(model, inputs.unsqueeze(1).to(device), lengths)
             losses.append(float(criterion(logits, labels.to(device)).item()))
             truths.extend(int(value) for value in labels.tolist())
             predictions.extend(int(value) for value in logits.argmax(dim=1).cpu().tolist())
@@ -139,7 +165,7 @@ def _copy_state(model: nn.Module) -> dict[str, torch.Tensor]:
     return {name: tensor.detach().cpu().clone() for name, tensor in model.state_dict().items()}
 
 
-def train_cnn(
+def train_model(
     model: nn.Module,
     train_dataset: WindowDataset,
     val_dataset: WindowDataset,
@@ -155,12 +181,16 @@ def train_cnn(
 
     The caller must create ``model`` *after* seeding (``set_seed(config.seed)``),
     otherwise the initial weights differ between runs with the same config.
+    ``preset: full`` adds mixup at the batch level (SPEC §10.3); validation and test
+    data are never augmented.
     """
     training = config.training
     effective_seed = config.seed if seed is None else seed
     set_seed(effective_seed)
     rng = np.random.default_rng(effective_seed)
     total_epochs = max(1, epochs if epochs is not None else training.epochs)
+    use_mixup = augmentation and config.augment.preset == "full"
+    mixup_alpha = config.augment.mixup_alpha
 
     train_loader = make_loader(
         train_dataset, training.batch_size, shuffle=True, seed=effective_seed
@@ -189,12 +219,22 @@ def train_cnn(
         started = time.perf_counter()
         model.train()
         losses: list[float] = []
-        for batch, labels in train_loader:
-            inputs = batch.unsqueeze(1)
+        for batch in train_loader:
+            batch_inputs, labels, lengths = _unpack_batch(batch)
+            inputs = batch_inputs.unsqueeze(1)
             if augmentation:
-                inputs = _augment_batch(inputs.squeeze(1), config, rng).unsqueeze(1)
-            logits = model(inputs.to(device))
-            loss = criterion(logits, labels.to(device))
+                inputs = _augment_batch(batch_inputs, config, rng).unsqueeze(1)
+            targets_a, targets_b, lam = labels, labels, 1.0
+            if use_mixup:
+                mixed, targets_a, targets_b, lam = mixup_batch(
+                    inputs.squeeze(1), labels, mixup_alpha, rng
+                )
+                inputs = mixed.unsqueeze(1)
+            logits = forward_logits(model, inputs.to(device), lengths)
+            loss = (
+                lam * criterion(logits, targets_a.to(device))
+                + (1.0 - lam) * criterion(logits, targets_b.to(device))
+            )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), training.grad_clip)
@@ -255,8 +295,9 @@ def predict_probs(
     model.eval()
     chunks: list[np.ndarray] = []
     with torch.no_grad():
-        for batch, _labels in loader:
-            logits = model(batch.unsqueeze(1).to(device))
+        for batch in loader:
+            inputs, _labels, lengths = _unpack_batch(batch)
+            logits = forward_logits(model, inputs.unsqueeze(1).to(device), lengths)
             chunks.append(torch.softmax(logits, dim=1).cpu().numpy())
     if not chunks:
         return np.zeros((0, 0), dtype=np.float32)
@@ -270,4 +311,8 @@ def predict_recordings(
 ) -> tuple[list[str], np.ndarray]:
     """Mean window probabilities per recording (SPEC FR-6/FR-10)."""
     probs = predict_probs(model, dataset, device)
-    return aggregate_by_group(probs, dataset.groups)
+    return aggregate_by_group(probs, dataset.groups())
+
+
+#: Stage-4 name; still used by older scripts and tests.
+train_cnn = train_model

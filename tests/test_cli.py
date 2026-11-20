@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from bird_recognizer.cli import main
 from support import make_catalog_with_audio
@@ -135,3 +137,71 @@ def test_train_without_splits_exits_three(tmp_dir: Path) -> None:
     make_catalog_with_audio(data_dir, per_species=4)
     assert main(_argv(tmp_dir, "prep", "cache")) == 0
     assert main(_argv(tmp_dir, "--smoke", "train", "cnn")) == 3
+
+
+def test_train_cnn_smoke_honours_aug_flag(tmp_dir: Path) -> None:
+    from bird_recognizer.train.runner import load_index
+
+    _seed_trainable(tmp_dir)
+    assert main(_argv(tmp_dir, "--smoke", "train", "cnn", "--aug", "none")) == 0
+    run_dir = _run_dirs(tmp_dir)[0]
+    snapshot = yaml.safe_load((run_dir / "config.yaml").read_text(encoding="utf-8"))
+    assert snapshot["augment"]["preset"] == "none"
+    rows = load_index(tmp_dir / "runs")
+    assert rows[0]["aug"] == "none"
+
+
+# --------------------------------------------------------------------------- #
+# train (etap 5): CRNN i transfer
+# --------------------------------------------------------------------------- #
+def _run_dirs(tmp_dir: Path) -> list[Path]:
+    return [path for path in (tmp_dir / "runs").iterdir() if path.is_dir()]
+
+
+def test_train_crnn_smoke_writes_run_with_pool(tmp_dir: Path) -> None:
+    _seed_trainable(tmp_dir)
+    assert main(_argv(tmp_dir, "--smoke", "train", "crnn", "--pool", "attention")) == 0
+    run_dirs = _run_dirs(tmp_dir)
+    assert len(run_dirs) == 1
+    metrics = json.loads((run_dirs[0] / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["model"] == "crnn"
+    assert metrics["options"]["pool"] == "attention"
+    assert (run_dirs[0] / "best.pt").is_file()
+    assert "crnn" in (tmp_dir / "runs" / "index.csv").read_text(encoding="utf-8")
+
+
+def test_train_transfer_scratch_smoke_writes_run(tmp_dir: Path) -> None:
+    _seed_trainable(tmp_dir)
+    argv = _argv(tmp_dir, "--smoke", "train", "transfer", "--arch", "resnet18", "--scratch")
+    assert main(argv) == 0
+    run_dirs = _run_dirs(tmp_dir)
+    assert len(run_dirs) == 1
+    assert "resnet18-scratch" in run_dirs[0].name
+    metrics = json.loads((run_dirs[0] / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["options"] == {"arch": "resnet18", "pretrained": False}
+    assert "none" in (tmp_dir / "runs" / "index.csv").read_text(encoding="utf-8")
+
+
+def test_transfer_scratch_and_pretrained_are_separate_runs(
+    tmp_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from torchvision.models import get_model
+
+    from bird_recognizer.models import transfer as transfer_module
+
+    monkeypatch.setattr(
+        transfer_module,
+        "_build_backbone",
+        lambda arch, pretrained: get_model(arch, weights=None),
+    )
+    _seed_trainable(tmp_dir)
+    assert main(_argv(tmp_dir, "--smoke", "train", "transfer", "--scratch")) == 0
+    assert main(_argv(tmp_dir, "--smoke", "train", "transfer", "--pretrained")) == 0
+    names = [path.name for path in _run_dirs(tmp_dir)]
+    assert any("resnet18-scratch" in name for name in names)
+    assert any("resnet18-pretrained" in name for name in names)
+    learning_rates = {
+        yaml.safe_load((path / "config.yaml").read_text(encoding="utf-8"))["training"]["lr"]
+        for path in _run_dirs(tmp_dir)
+    }
+    assert learning_rates == {0.001, 0.0003}

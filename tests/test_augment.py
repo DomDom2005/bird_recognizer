@@ -6,7 +6,6 @@ from dataclasses import replace
 
 import numpy as np
 
-from bird_recognizer.train import augment as augment_module
 from bird_recognizer.train.augment import add_noise, augment_mel, shift_time
 
 
@@ -55,11 +54,3 @@ def test_basic_preset_changes_signal(config) -> None:
     assert out.shape == mel.shape
     assert out.dtype == np.float32
 
-
-def test_full_preset_warns_and_falls_back(config, caplog) -> None:
-    augment_module._FULL_WARNED = False
-    settings = replace(config.augment, preset="full")
-    with caplog.at_level("WARNING", logger="bird_recognizer.train.augment"):
-        out = augment_mel(_mel(), settings, np.random.default_rng(0))
-    assert out.shape == (8, 32)
-    assert any("etapie 5" in message for message in caplog.messages)

@@ -170,6 +170,11 @@ class Run:
         with self.path("metrics.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
 
+    def record_parameters(self, count: int) -> None:
+        """Append the measured parameter count to ``env.txt`` (SPEC §10.4)."""
+        with self.path("env.txt").open("a", encoding="utf-8") as handle:
+            handle.write(f"model_parameters: {int(count)}\n")
+
     def save_metrics(self, payload: dict[str, Any]) -> None:
         self.path("metrics.json").write_text(
             json.dumps(_stringify(payload), ensure_ascii=False, indent=2, sort_keys=True),

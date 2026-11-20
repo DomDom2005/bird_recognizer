@@ -14,23 +14,35 @@ from bird_recognizer.eval.metrics import (
     top_k_accuracy,
 )
 from bird_recognizer.models.cnn import SmallCNN
-from bird_recognizer.train.loop import class_weights, set_seed, train_cnn
+from bird_recognizer.models.crnn import CRNN
+from bird_recognizer.train.loop import class_weights, set_seed, train_model
 
 
 class ToyDataset:
     """Duck-typed ``WindowDataset``: random mel windows, few classes, one group each."""
 
-    def __init__(self, n: int = 24, classes: int = 3, seed: int = 0) -> None:
+    def __init__(
+        self,
+        n: int = 24,
+        classes: int = 3,
+        seed: int = 0,
+        *,
+        with_lengths: bool = False,
+    ) -> None:
         rng = np.random.default_rng(seed)
         self.data = rng.standard_normal((n, 16, 64)).astype(np.float32)
         self.labels = [index % classes for index in range(n)]
         self.recording_ids = [f"rec-{index}" for index in range(n)]
+        self.with_lengths = with_lengths
 
     def __len__(self) -> int:
         return len(self.labels)
 
-    def __getitem__(self, index: int) -> tuple[np.ndarray, int]:
-        return self.data[index], self.labels[index]
+    def __getitem__(self, index: int) -> tuple:
+        window, label = self.data[index], self.labels[index]
+        if self.with_lengths:
+            return window, label, int(window.shape[-1])
+        return window, label
 
     def groups(self) -> list[str]:
         return list(self.recording_ids)
@@ -57,7 +69,7 @@ def test_class_weights_are_inverse_frequency() -> None:
 
 def test_train_cnn_records_history_and_best_state(config) -> None:
     model = SmallCNN(n_classes=len(config.species))
-    result = train_cnn(
+    result = train_model(
         model, ToyDataset(), ToyDataset(seed=1), config, _cpu(), epochs=1
     )
     assert len(result.history) == 1
@@ -70,14 +82,42 @@ def test_train_cnn_records_history_and_best_state(config) -> None:
 def test_training_is_deterministic_for_same_seed(config) -> None:
     set_seed(config.seed)
     first_model = SmallCNN(n_classes=len(config.species))
-    first = train_cnn(first_model, ToyDataset(), ToyDataset(seed=1), config, _cpu(), epochs=1)
+    first = train_model(first_model, ToyDataset(), ToyDataset(seed=1), config, _cpu(), epochs=1)
     set_seed(config.seed)
     second_model = SmallCNN(n_classes=len(config.species))
-    second = train_cnn(
+    second = train_model(
         second_model, ToyDataset(), ToyDataset(seed=1), config, _cpu(), epochs=1
     )
     assert first.best_val_macro_f1 == second.best_val_macro_f1
     assert first.history[0].train_loss == second.history[0].train_loss
+
+
+def test_train_crnn_accepts_length_masks(config) -> None:
+    model = CRNN(n_classes=len(config.species), n_mels=16)
+    result = train_model(
+        model,
+        ToyDataset(with_lengths=True),
+        ToyDataset(seed=1, with_lengths=True),
+        config,
+        _cpu(),
+        epochs=1,
+    )
+    assert len(result.history) == 1
+    assert result.history[0].train_loss > 0.0
+
+
+def test_full_preset_trains_with_mixup_and_specaugment(config) -> None:
+    augmented = replace(config, augment=replace(config.augment, preset="full"))
+    result = train_model(
+        SmallCNN(n_classes=len(config.species)),
+        ToyDataset(),
+        ToyDataset(seed=1),
+        augmented,
+        _cpu(),
+        epochs=1,
+    )
+    assert len(result.history) == 1
+    assert np.isfinite(result.history[0].train_loss)
 
 
 def test_early_stopping_stops_before_max_epochs(config) -> None:
@@ -87,7 +127,7 @@ def test_early_stopping_stops_before_max_epochs(config) -> None:
         early_stopping_min_delta=0.9,
     )
     impatient = replace(config, training=training)
-    result = train_cnn(
+    result = train_model(
         SmallCNN(n_classes=len(config.species)),
         ToyDataset(),
         ToyDataset(seed=1),

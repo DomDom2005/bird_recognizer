@@ -21,6 +21,8 @@ python scripts/check_leakage.py --data-dir data   # ZAWSZE przed treningiem
 bird_recognizer prep cache --limit 24 && bird_recognizer prep cache --limit 24 --verify
 bird_recognizer train mfcc --smoke && bird_recognizer train cnn --smoke
 bird_recognizer train crnn --pool attention --smoke
+bird_recognizer train transfer --arch resnet18 --scratch --smoke   # bez sieci
+bird_recognizer train transfer --arch resnet18 --smoke            # wagi ImageNet (raz, sieć)
 bird_recognizer eval --run RUN --split test
 bird_recognizer demo --run RUN
 ```
@@ -65,6 +67,12 @@ używaj równoważnej formy `python -m bird_recognizer.cli <komenda>`.
 - **Determinizm zaczyna się od seeda:** `set_seed(config.seed)` musi być **przed** utworzeniem
   modelu (torch startuje z losowym stanem procesu). Ten błąd dał dwa różne wyniki z tym samym
   configiem — patrz dziennik, odstępstwo 24.
+- `--pretrained` pobiera wagi ImageNet **raz** do `~/.cache/torch`. W sandboxie DSH ten katalog
+  bywa niezapisywalny (`WinError 5`) — ustaw wtedy `TORCH_HOME` na katalog w `data/`
+  (dane są poza repo). `--scratch` działa bez sieci i bez cache.
+- Augmentacja `full` = przesunięcie + szum + SpecAugment (per okno) + mixup (batch treningowy).
+  Na znormalizowanym mel zero w masce to średnia pasma, a mixup miesza **tylko** batch treningowy;
+  walidacja i test zostają czyste — to warunek porównywalności runów.
 - `data/cache` jest w pełni odtwarzalny z `data/raw`; usunięcie cache nie traci danych.
 - Windows: `DataLoader` z `num_workers>0` wymaga `if __name__ == "__main__"` w skryptach
   startowych; przy problemach zacznij od `num_workers=0`.

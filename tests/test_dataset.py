@@ -11,7 +11,9 @@ import pytest
 from bird_recognizer.data.dataset import (
     MEL_FILENAME,
     META_FILENAME,
+    WindowDataset,
     build_cache,
+    build_window_index,
     iter_cached_windows,
     list_cache,
     load_recording,
@@ -138,6 +140,21 @@ def test_iter_cached_windows_counts_kept_windows(config, tmp_dir: Path) -> None:
     assert window.shape[0] == config.spectrogram.n_mels
     assert isinstance(label, int)
     assert mask.dtype == bool
+
+
+def test_window_dataset_with_lengths_reports_padding(config, tmp_dir: Path) -> None:
+    data_dir = tmp_dir / "data-lengths"
+    make_catalog_with_audio(data_dir, seconds=4.0)
+    build_cache(config, data_dir)
+    refs = build_window_index(config, data_dir)
+    dataset = WindowDataset(refs, with_lengths=True)
+    samples = [dataset[index] for index in range(len(dataset))]
+    assert all(len(sample) == 3 for sample in samples), "oczekiwano (mel, label, długość)"
+    frames = samples[0][0].shape[-1]
+    lengths = [sample[2] for sample in samples]
+    assert max(lengths) == frames
+    assert min(lengths) < frames, "krótkie ostatnie okno powinno mieć mniej ważnych ramek"
+    assert len(WindowDataset(refs)[0]) == 2
 
 
 def test_build_without_catalog_raises(config, tmp_dir: Path) -> None:

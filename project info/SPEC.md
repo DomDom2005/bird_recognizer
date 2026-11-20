@@ -1,6 +1,6 @@
 # SPEC.md — bird_recognizer
 
-> Wersja 1.3 · 2026-11-20 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
+> Wersja 1.4 · 2026-11-20 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
 > Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium: `https://github.com/DomDom2005/bird_recognizer` — **`TODO(verify)`**: potwierdzić nazwę repo i branch (`main`) u człowieka, zanim wklei się to do README.
 
 ---
@@ -339,9 +339,11 @@ bird_recognizer data download [--species NAME ...] [--limit N] [--retry-failed] 
 bird_recognizer data split    [--seed 42] [--force]
 bird_recognizer prep cache    [--species NAME ...] [--limit N] [--force] [--verify]
 bird_recognizer train mfcc    [--clf {svm,rf}] [--deltas]
-bird_recognizer train cnn     [--window 3] [--aug basic|full|none] [--epochs N]
+bird_recognizer train cnn     [--aug {none,basic,full}] [--epochs N]
 bird_recognizer train transfer --arch {resnet18,efficientnet_b0} [--pretrained|--scratch]
+                              [--aug {none,basic,full}] [--epochs N]
 bird_recognizer train crnn    [--pool {mean,attention}] [--rnn {gru,lstm}]
+                              [--aug {none,basic,full}] [--epochs N]
 bird_recognizer eval          --run RUN [--split {val,test,own}]
 bird_recognizer aggregate     --run RUN --method {mean,vote}
 bird_recognizer error-analysis --run RUN
@@ -351,6 +353,7 @@ bird_recognizer report        --runs RUN [RUN ...] --out docs/experiments.md
 ```
 
 Globalne opcje: `--config PATH` (domyślnie `configs/default.yaml`), `--data-dir PATH`, `--runs-dir PATH`, `--device {cpu,cuda,mps}`, `--seed INT`, `--smoke`, `-v/--verbose`. Komunikaty i pomoc po polsku.
+Ablacja okna (`--window 5|10`) wymaga cache zbudowanego dla innej geometrii okna, więc dochodzi razem z `ablate` w etapie 6, a nie jako flaga jednego runu.
 
 Skrypty pomocnicze: `python scripts/probe_api.py`, `python scripts/check_leakage.py`.
 
@@ -415,8 +418,13 @@ Augmentacje **tylko** na trainie; walidacja i test zawsze czyste. To jest warune
 
 **Stan po etapie 4:** zaimplementowane przesunięcie w czasie i szum addytywny (na znormalizowanych
 ramkach mel). **Wzmocnienie (gain) jest pominięte**, bo cache trzyma spektrogramy znormalizowane
-per okno — stała zmiana poziomu znosi się przy normalizacji (dziennik, odstępstwo 23). `mixup`
-i SpecAugment dochodzą w etapie 5 (preset `full` na razie ostrzega i używa `basic`).
+per okno — stała zmiana poziomu znosi się przy normalizacji (dziennik, odstępstwo 23).
+
+**Stan po etapie 5:** `preset: full` = przesunięcie + szum + SpecAugment (2 maski częstotliwości
+≤16 pasm, 2 maski czasu ≤20 ramek; wypełnienie 0, czyli średnia pasma na znormalizowanym mel)
++ mixup α=0,4 na batchu treningowym (utrata = λ·CE(a) + (1−λ)·CE(b)). `gain` nadal pominięty
+(odstępstwo 23); powrót wymaga przeniesienia normalizacji do ładowania. `basic` pozostaje
+przesunięciem i szumem. Walidacja i test nigdy nie są augmentowane.
 
 ### 10.4 Modele
 
@@ -559,7 +567,7 @@ Dodatkowo: `docs/experiments.md` (generowany + wnioski), `docs/manual-checklist.
 | 2 | Dane: katalog, pobieranie, podział | L | 1 | — | `[x]` 2026-11-18 |
 | 3 | Preprocessing i cache spektrogramów | M | 2 | — | `[x]` 2026-11-20 |
 | 4 | Baseline: MFCC+SVM i mały CNN | L | 3 | — | `[x]` 2026-11-20 |
-| 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[ ]` |
+| 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[x]` 2026-11-20 |
 | 6 | Eksperymenty i ablacje | L | 5 | — | `[ ]` |
 | 7 | Ewaluacja i analiza błędów | M | 6 | własne nagrania z telefonu | `[ ]` |
 | 8 | Demo, raport i domknięcie | M | 7 | wnioski w `experiments.md` | `[ ]` |
@@ -761,11 +769,11 @@ bird_recognizer train cnn  --smoke
 **Tworzy/zmienia:** `models/transfer.py`, `models/crnn.py`, `train/augment.py` (wariant `full`), `cli.py` (`train transfer`, `train crnn`), `tests/test_{transfer,crnn,augment_full}.py`.
 **Zadania**
 
-- [ ] `transfer.py`: ResNet18 / EfficientNet-B0, wejście 1-kanałowe, `--pretrained|--scratch`, nowa głowica.
-- [ ] `crnn.py`: backbone z etapu 4 → BiGRU(hidden 128, dropout 0,3) → pooling `mean`/`attention`; maskowanie długości w loss i poolingu.
-- [ ] `augment.py` wariant `full`: mixup (α=0,4) i SpecAugment zgodnie z §10.3.
-- [ ] `models_registry.py`: nazwa modelu → klasa + fabryka z configu (CLI nie zna konkretnych klas).
-- [ ] trening na realnym wycinku, jeśli człowiek pobrał dane (inaczej `--smoke` na realnym katalogu z limitem i jawna adnotacja w raporcie).
+- [x] `transfer.py`: ResNet18 / EfficientNet-B0, wejście 1-kanałowe, `--pretrained|--scratch`, nowa głowica.
+- [x] `crnn.py`: backbone z etapu 4 → BiGRU(hidden 128, dropout 0,3) → pooling `mean`/`attention`; maskowanie długości w loss i poolingu.
+- [x] `augment.py` wariant `full`: mixup (α=0,4) i SpecAugment zgodnie z §10.3.
+- [x] `models_registry.py`: nazwa modelu → klasa + fabryka z configu (CLI nie zna konkretnych klas).
+- [x] trening na realnym wycinku, jeśli człowiek pobrał dane (inaczej `--smoke` na realnym katalogu z limitem i jawna adnotacja w raporcie).
 
 **Bramka**
 
@@ -778,6 +786,18 @@ python -m bird_recognizer.cli train transfer --arch resnet18 --scratch --smoke
 - CRNN przechodzi test dla T=188 **i** T=50 (zmienne okno); pooling `mean` i `attention` dają różne wyjścia na tych samych danych wejściowych.
 - Transfer `--scratch` i `--pretrained` tworzą osobne runy z różnymi `tag`.
 - Wszystkie trzy rodziny modeli są w rejestrze i mają test kształtu wyjścia `(B, n_classes)`.
+
+**Stan po etapie 5 (2026-11-20):** rejestr `cnn|crnn|transfer`; CRNN = backbone z etapu 4 → rzut każdej
+ramki do 256 cech → BiGRU(hidden 128) → pooling `mean`/`attention` z maską `valid_frames`
+(`WindowDataset(with_lengths=True)`, 1 212 396 parametrów). Transfer: pierwsza konwolucja
+1-kanałowa (przy `--pretrained` wagi RGB **sumowane**, nie uśredniane — zachowuje energię),
+nowa głowica, bez normalizacji ImageNet, bo cache jest już znormalizowany per okno; ResNet18
+11 176 396 parametrów, EfficientNet-B0 — testy kształtu. `full` = przesunięcie + szum +
+SpecAugment (2 maski częstotliwości ≤16 pasm, 2 maski czasu ≤20 ramek, wypełnienie 0 = średnia
+pasma) + mixup α=0,4 w batchu treningowym. `gain` nadal pominięty (odstępstwo 23).
+Zmierzone na realnym podzbiorze (`--smoke`, 2 nagrania/gatunek, CPU): CRNN 1 epoka ≈ 21 s,
+ResNet18 ≈ 28 s; dwa przebiegi CRNN z tym samym seedem identyczne. `--pretrained` pobiera
+wagi ImageNet raz (w sandboxie `TORCH_HOME` poza repo, patrz dziennik, odstępstwo 30).
 
 **Commit:** `feat(models): transfer backbones and crnn with temporal pooling` · **Dziennik:** czy pretrained wagi były osiągalne offline, jak zachowuje się krótkie okno.
 **Stop, jeśli:** brak realnych danych → bramka na syntetyku wystarcza, ale żaden wynik syntetyczny nie może trafić do tabeli jako rezultat badania (tylko z adnotacją „DANE SYNTETYCZNE”).
