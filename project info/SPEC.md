@@ -327,7 +327,7 @@ Katalogi poza repo (gitignore): `data/` (`raw/`, `cache/`, `own/`, `catalog.json
 
 ### 7.4 `data/cache/<id>/`
 
-`mel.npy` (float16, `(n_kept, 128, 188)`), `meta.json` (geometria, `rms` **wszystkich** okien, `kept`, `valid_frames`, `config_hash`, `sha256_audio`, `created_at`). Zmierzone 2026-11-20: **~1,5 MB na minutę audio** (521 okien × 48 KB = 24 MB dla 15,8 min) → dla pełnego zbioru (~3738 min) rząd **5,6 GB**. Cache jest w pełni odtwarzalny z `data/raw` — nigdy nie jest źródłem prawdy.
+`mel.npy` (float16, `(n_kept, 128, 188)`), `meta.json` (geometria, `rms` **wszystkich** okien, `kept`, `valid_frames`, `config_hash`, `sha256_audio`, `created_at`). **Pomiar 2026-11-20 po pełnym pobraniu:** 2897 nagrań, 3755,7 min audio, **~1,6 MB na minutę** (1,72 MB na okno; 131 900 okien = 6,06 GB na dysku). Wcześniejszy szacunek 1,5 MB/min z próbki 24 nagrań był bliski. Cache jest w pełni odtwarzalny z `data/raw` — nigdy nie jest źródłem prawdy.
 
 ---
 
@@ -402,7 +402,7 @@ Wszystko w `configs/default.yaml`; tabela jest **źródłem prawdy dla wartości
 
 ### 10.2 Bramkowanie ciszy (FR-4)
 
-Energia okna = RMS. Odrzuć okno, jeśli `rms < max(abs_floor, rel_floor × p90(rms nagrania))`, gdzie `abs_floor = 1e-3` (≈ −60 dBFS), `rel_floor = 0.1`. Progi są w configu; raportuj, ile procent okien odpadło per gatunek (to wpływa na interpretację wyników). **Pomiar 2026-11-20 (24 nagrania):** odrzucone 18,6% okien; 2 nagrania (peak −42 i −34 dBFS) odpadły **całkowicie** przez `abs_floor` — to nagrania bardzo ciche, poniżej progu użyteczności; decyzja: progi zostają, a takie nagrania są raportowane jako `empty_after_gating`.
+Energia okna = RMS. Odrzuć okno, jeśli `rms < max(abs_floor, rel_floor × p90(rms nagrania))`, gdzie `abs_floor = 1e-3` (≈ −60 dBFS), `rel_floor = 0.1`. Progi są w configu; raportuj, ile procent okien odpadło per gatunek (to wpływa na interpretację wyników). **Pomiar 2026-11-20 (24 nagrania):** odrzucone 18,6% okien; 2 nagrania (peak −42 i −34 dBFS) odpadły **całkowicie** przez `abs_floor` — to nagrania bardzo ciche, poniżej progu użyteczności; decyzja: progi zostają, a takie nagrania są raportowane jako `empty_after_gating`. **Pomiar po pełnym pobraniu (2917 nagrań):** cache zbudowany dla **2897** nagrań; 131 900/151 115 okien zachowanych (**12,7% odrzuconych**), odrzucenia per gatunek od 2,0% (wróbel) do 27,1% (piecuszek); **20 nagrań bez cache**: 19 `empty_after_gating` (bardzo ciche) i 1 błąd dekodowania (`984200`), w tym 16 w train, 4 w val, **0 w test**. Progi zostają; brakujące nagrania są raportowane, a `n` w tabelach liczy się z cache, nie z katalogu.
 
 ### 10.3 Augmentacje (`--aug`)
 
