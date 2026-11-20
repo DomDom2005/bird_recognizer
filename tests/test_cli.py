@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from bird_recognizer.cli import main
+from support import make_catalog_with_audio
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "synthetic_data"
@@ -76,3 +77,18 @@ def test_split_without_force_keeps_existing_file(tmp_dir: Path) -> None:
     before = path.read_text(encoding="utf-8")
     assert main(_argv(tmp_dir, "data", "split")) == 0
     assert path.read_text(encoding="utf-8") == before
+
+
+# --------------------------------------------------------------------------- #
+# prep cache (etap 3)
+# --------------------------------------------------------------------------- #
+def test_prep_cache_builds_and_verifies(tmp_dir: Path) -> None:
+    data_dir = tmp_dir / "data"
+    make_catalog_with_audio(data_dir)
+    assert main(_argv(tmp_dir, "prep", "cache")) == 0
+    assert (data_dir / "cache").is_dir()
+    assert main(_argv(tmp_dir, "prep", "cache", "--verify")) == 0
+
+
+def test_prep_cache_verify_without_cache_exits_three(tmp_dir: Path) -> None:
+    assert main(_argv(tmp_dir, "prep", "cache", "--verify")) == 3

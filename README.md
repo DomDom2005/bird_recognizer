@@ -59,13 +59,15 @@ python scripts/probe_api.py --dry-run
 python scripts/probe_api.py --live      # jeden request na punkt; wymaga klucza
 ```
 
-Pobranie danych (etap 2):
+Pobranie i przygotowanie danych (etapy 2–3):
 
 ```bash
 bird_recognizer data catalog            # metadane wszystkich gatunków -> data/catalog.jsonl
 bird_recognizer data download --limit 10   # audio -> data/raw, wznawialne
 bird_recognizer data split              # -> data/splits.json
 python scripts/check_leakage.py --data-dir data
+bird_recognizer prep cache --limit 24   # okna + log-mel -> data/cache (float16)
+bird_recognizer prep cache --verify     # kontrola config_hash, kształtów i dtype
 ```
 
 Jeśli komenda `bird_recognizer` nie jest w PATH (tak jest na części instalacji Windows,
@@ -77,13 +79,13 @@ Kolejne kroki (etapy 3–8) opisuje `project info/SPEC.md` §15: karta etapu = z
 ## 5. Tryb bez internetu
 
 - `python scripts/probe_api.py --dry-run` — waliduje config i wypisuje zapytania, zero requestów.
-- `python scripts/make_synthetic_demo.py` (etap 3) — mały syntetyczny zbiór do testów end-to-end.
-- Testy nigdy nie dotykają sieci: `tests/conftest.py` blokuje gniazda na całą sesję,
-  a HTTP jest mockowany wstrzykiwanym transportem (`tests/support.py`).
+- Testy generują własne krótkie WAV-y w `tmp_dir` (`tests/support.py`) — zero sieci i zero
+  prawdziwych nagrań w testach. Nie ma osobnego „zbioru syntetycznego”; `--smoke` korzysta
+  z realnego katalogu z `--limit`.
 
 ## 6. Wyniki
 
-Dla etapu 2: brak — modeli jeszcze nie ma. Tabela ablacji powstanie w `docs/experiments.md`
+Dla etapu 3: brak — modeli jeszcze nie ma. Tabela ablacji powstanie w `docs/experiments.md`
 generowanym z `runs/index.csv`. Wnioski badawcze dopisuje człowiek.
 
 ## 7. Testy
@@ -91,12 +93,13 @@ generowanym z `runs/index.csv`. Wnioski badawcze dopisuje człowiek.
 ```bash
 pytest                 # całość, offline (gniazda zablokowane)
 ruff check .
-pytest --cov=bird_recognizer.xc --cov=bird_recognizer.data   # pokrycie etapu 2
+pytest --cov=bird_recognizer.xc --cov=bird_recognizer.data   # pokrycie etapów 2–3
 ```
 
-Stan: 99 testów; pokrycie `xc/` 90–94%, `data/splits.py` 96%. Zakres: konfiguracja, redakcja
-sekretów, blokada sieci, klient API (paginacja, `400`/`403`/`429`/`5xx`, backoff), katalog,
-pobieranie z wznawianiem, podział i kontrola wycieku, CLI.
+Stan: **136 testów**; pokrycie `data/` 88–100% (audio 93%, dataset 88%, spectrogram 100%,
+windows 97%, splits 98%), `xc/` 90–94%. Zakres: konfiguracja, redakcja sekretów, blokada sieci,
+klient API (paginacja, `400`/`403`/`429`/`5xx`, backoff), katalog, pobieranie z wznawianiem,
+podział i kontrola wycieku, audio (resample, HPF), okna i bramka ciszy, log-mel, cache, CLI.
 
 ## 8. Struktura repo
 
@@ -106,9 +109,9 @@ bird_recognizer/
 ├── configs/               # default.yaml (progi), species.yaml (12 gatunków)
 ├── src/bird_recognizer/   # config, errors, logging_setup, cli
 │   ├── xc/                # client, catalog, download
-│   └── data/              # splits (+ etap 3: audio, windows, cache)
-├── scripts/               # probe_api.py, check_leakage.py, (etap 3: synthetic demo)
-├── tests/                 # + fixtures/api, fixtures/synthetic_data
+│   └── data/              # splits, audio, windows, spectrogram, dataset (cache)
+├── scripts/               # probe_api.py, check_leakage.py
+├── tests/                 # + fixtures/api, fixtures/synthetic_data, support.py (WAV-y)
 ├── docs/                  # api-notes, ai-journal, data-flow, manual-checklist
 └── README.md
 ```
@@ -128,8 +131,12 @@ Pełne drzewo: `project info/SPEC.md` §5. Dane (`data/`) i wyniki (`runs/`) są
 - Grupy nagrywających są bardzo nierówne (jeden nagrywający = setki plików), więc train zbiera
   kilku najpłodniejszych, a val/test — dziesiątki mniejszych; podział jest deterministyczny
   i bez wycieku, ale nie jest losowaniem pojedynczych nagrań.
-- Liczby w README to snapshoty z podaną datą; katalog xeno-canto rośnie, więc przed etapem 3
-  odśwież `data catalog` i zapisz nowe wartości.
+- Liczby w README to snapshoty z podaną datą; katalog xeno-canto rośnie, więc przed kolejnym
+  etapem odśwież `data catalog` i zapisz nowe wartości.
+- Cache spektrogramów zajmuje **~1,5 MB na minutę audio** (~5,6 GB dla całego zbioru), więc
+  `data/cache` trzymaj poza repo i usuwaj, gdy brakuje miejsca — jest w pełni odtwarzalny.
+- Bramka ciszy (`abs_floor` ≈ −60 dBFS RMS) odrzuca bardzo ciche nagrania w całości
+  (`empty_after_gating`); na próbce 24 nagrań dotyczyło to 2 (peak −42 i −34 dBFS).
 - `TODO(verify)` z `project info/SPEC.md` §4.3 są otwarte do czasu uruchomienia `probe_api.py --live`.
 
 ## 10. Bezpieczeństwo i licencje

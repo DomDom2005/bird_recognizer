@@ -11,6 +11,8 @@
 | 2026-11-02 | 1 | `probe_api.py --live` na prawdziwym kluczu: 7 sprawdzeń, tempo 1 req/s, klucz nigdy nie wypisany | wyniki w `docs/api-notes.md` i SPEC §4.3 | trafne, ale ujawniło rozbieżność dokumentacji z API (status tag) |
 | 2026-11-18 | 2 | `xc/client.py` (tagi, paginacja, throttle, backoff `429`/`503`, mapowanie błędów), `xc/catalog.py` (scalanie po `id`, `_meta.redacted_fields`, zapis atomowy), `xc/download.py` (wznawianie, sha256, `--retry-failed`, raport), `data/splits.py` (grupy po `rec`, naprawa pokrycia, `check_leakage`), `cli.py` + `scripts/check_leakage.py`, testy na wstrzykiwanym transporcie | bramka etapu 2: `ruff check .` czysty, `pytest -q --cov=…` → 99 passed, pokrycie xc 90–94% i `data/splits.py` 96%, `check_leakage.py` exit 0 na fixtures | trafne po dwóch korektach algorytmu podziału |
 | 2026-11-18 | 2 | uruchomienie na żywo: `data catalog` (2917 nagrań), `data split` (2203/407/307), `data download --limit 2` (3,3 MB) i ponowne uruchomienie (wznawianie: 2 pominięte) | `check_leakage.py --data-dir data` → brak wycieku; raport pobierania i `sha256_audio` w katalogu | trafne; live run wykrył błąd podziału, którego testy nie łapały |
+| 2026-11-20 | 3 | `data/audio.py` (soundfile — czyta mp3, torchaudio tylko do resamplingu, HPF Butterwortha), `data/windows.py` (3 s / 1,5 s, dopełnianie ogona, bramka RMS), `data/spectrogram.py` (log-mel 128 pasm, normalizacja per okno, `config_hash`), `data/dataset.py` (cache float16 + meta, `--verify`, etykiety, maska), CLI `prep cache`, generator WAV w testach zamiast zbioru syntetycznego | bramka etapu 3: `ruff check .` czysty, 136 testów, pokrycie data 88–100%, `prep cache --limit 24` + `--verify` exit 0 | trafne po korektach (odstępstwa 19–22) |
+| 2026-11-20 | 3 | pomiar na żywych nagraniach: 22/24 przetworzone, 2 odrzucone przez `abs_floor`, 521/640 okien (18,6% odpadło), 15,8 min audio, cache 24 MB | `--verify` OK, dwa przebiegi dają identyczne `mel.npy` | trafne; rozmiar cache okazał się ~3× większy niż szacunek SPEC |
 
 ## Odstępstwa od SPEC
 
@@ -89,7 +91,25 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     bo syntetyk nigdy nie był danymi treningowymi, tylko rusztowaniem offline. Uproszczenie:
     `make_synthetic_demo.py` i FR-15 znikają; testy generują kilkusekundowe WAV-y w `tmp_dir`,
     a przebiegi `--smoke` w etapach 4–6 korzystają z realnego katalogu z `--limit` na gatunek.
-    SPEC do podbicia na 1.3 przy wejściu w etap 3.
+    SPEC podbite do 1.3 przy wejściu w etap 3 (FR-15 przedefiniowane, bramki etapów 3–5 bez
+    `data/synthetic`).
+19. **`torchaudio.load` wymaga TorchCodec (etap 3).** W zainstalowanej wersji torchaudio 2.11.1
+    `torchaudio.load` rzuca `ImportError: TorchCodec is required`, a `torchaudio.list_audio_backends`
+    nie istnieje. `soundfile` (libsndfile) czyta mp3 bez problemu (48 kHz, mono). Decyzja:
+    dekodowanie przez `soundfile`, resampling przez `torchaudio.functional.resample`; SPEC §10.1
+    dopisane. Wniosek: wersję biblioteki sprawdzaj funkcją, nie założeniem z dokumentacji.
+20. **Rozmiar cache okazał się ~3× większy niż szacunek (§7.4).** SPEC szacował ~2 GB dla
+    1000 min audio; pomiar: 24 MB na 15,8 min = **~1,5 MB/min**, czyli ~5,6 GB dla pełnego
+    zbioru (3738 min). Powód: realne nagrania są dłuższe niż zakładane 1000 min. Dysk: 900+ GB
+    wolne, więc nie blokuje; §7.4 zaktualizowane liczbą zmierzoną.
+21. **Ogon okna dopełniany zerami.** Krótkie ostatnie okno jest zachowane, ale dopełnione zerami
+    do pełnej długości — inaczej `np.stack` nie zbuduje jednolitego tensora. Prawdziwą długość
+    trzyma `meta.valid_frames`, z której `load_recording` buduje maskę. SPEC §15.8 opisuje to
+    jawnie.
+22. **Dwa nagrania odrzucone w całości przez bramkę (2/24).** `1054634` (peak −42 dBFS) i
+    `1058630` (peak −34 dBFS) mają RMS poniżej `abs_floor = 1e-3`; dla porównania normalne
+    nagranie ma peak 0,70 i RMS 0,039. Progi zostają (to nagrania poniżej progu użyteczności),
+    a przypadki są raportowane jako `empty_after_gating`; nota w SPEC §10.2 i README.
 
 ## Wznowienie po przerwie (2026-11-18)
 

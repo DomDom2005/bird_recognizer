@@ -10,6 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .config import DEFAULT_CONFIG_PATH, Config, get_api_key, load_config
+from .data.dataset import build_cache, list_cache, verify_cache
 from .data.splits import make_and_save
 from .errors import AppError
 from .logging_setup import configure_console, setup_logging
@@ -48,6 +49,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     split = data_sub.add_parser("split", help="podział train/val/test")
     split.add_argument("--force", action="store_true", help="nadpisz istniejący podział")
+
+    prep = sub.add_parser("prep", help="preprocessing: cache spektrogramów")
+    prep_sub = prep.add_subparsers(dest="prep_command", required=True)
+    cache = prep_sub.add_parser("cache", help="zbuduj cache okien log-mel")
+    cache.add_argument("--species", nargs="*", default=None)
+    cache.add_argument("--limit", type=int, default=None, help="pierwsze N nagrań z katalogu")
+    cache.add_argument("--force", action="store_true", help="przelicz także aktualny cache")
+    cache.add_argument("--verify", action="store_true", help="tylko sprawdź cache")
 
     return parser
 
@@ -106,6 +115,51 @@ def _cmd_download(config: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_cache(config: Config, args: argparse.Namespace) -> int:
+    data_dir = config.paths.data_dir
+    if args.verify:
+        problems = verify_cache(config, data_dir)
+        if problems:
+            print(f"Cache NIEZGODNY ({len(problems)} problemów):")
+            for problem in problems[:20]:
+                print(f"  - {problem}")
+            if len(problems) > 20:
+                print(f"  ... i {len(problems) - 20} więcej")
+            return 3
+        print(f"Cache OK ({len(list_cache(data_dir))} nagrań)")
+        return 0
+
+    report = build_cache(
+        config,
+        data_dir,
+        species=args.species,
+        limit=args.limit,
+        force=args.force,
+    )
+    print(
+        f"Cache: przetworzone {report.processed}, pominięte {report.skipped}, "
+        f"błędy {len(report.errors)}"
+    )
+    if report.skipped_reasons:
+        reasons = ", ".join(
+            f"{name}={count}" for name, count in sorted(report.skipped_reasons.items())
+        )
+        print(f"  pominięcia: {reasons}")
+    print(
+        f"  okna: zachowane {report.windows_kept}/{report.windows_total} "
+        f"(odrzucone {report.rejected_ratio:.1%})"
+    )
+    print(f"  audio: {report.audio_seconds / 60:.1f} min")
+    for species, stats in sorted(report.per_species.items()):
+        ratio = 1.0 - stats["kept"] / stats["windows"] if stats["windows"] else 0.0
+        print(f"  {species}: {stats['kept']}/{stats['windows']} okien (odrzucone {ratio:.1%})")
+    for error in report.errors[:10]:
+        print(f"  BŁĄD {error['id']}: {error['reason']}")
+    if report.errors and report.processed == 0:
+        return 3
+    return 0
+
+
 def _cmd_split(config: Config, args: argparse.Namespace) -> int:
     plan = make_and_save(config.paths.data_dir, seed=config.seed, force=args.force)
     for name in ("train", "val", "test"):
@@ -135,6 +189,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _cmd_download(config, args)
             if args.data_command == "split":
                 return _cmd_split(config, args)
+        if args.command == "prep" and args.prep_command == "cache":
+            return _cmd_cache(config, args)
         LOGGER.error("Nieznana komenda: %s", args.command)
         return 1
     except AppError as exc:

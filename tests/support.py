@@ -1,10 +1,13 @@
-"""Shared helpers for stage-2 tests: fake transport and object factories."""
+"""Shared test helpers: fake transport, object factories and tiny WAV files."""
 
 from __future__ import annotations
 
 import json
+import wave
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from bird_recognizer.xc.client import HttpResponse
 
@@ -181,3 +184,77 @@ def write_catalog(path: Path, entries: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [json.dumps(item, ensure_ascii=False, sort_keys=True) for item in entries]
     path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Audio for offline tests (SPEC FR-15: no real recordings, no network)
+# --------------------------------------------------------------------------- #
+def write_wav(
+    path: Path,
+    *,
+    seconds: float = 6.0,
+    sample_rate: int = 32000,
+    freq: float = 1000.0,
+    kind: str = "tone",
+    amplitude: float = 0.3,
+    seed: int = 0,
+) -> Path:
+    """Write a deterministic 16-bit mono WAV (tone / noise / silence / silence-then-tone)."""
+    if kind not in {"tone", "noise", "silence", "silence-then-tone"}:
+        raise ValueError(f"nieznany rodzaj sygnału: {kind}")
+    samples = max(1, int(round(seconds * sample_rate)))
+    timeline = np.arange(samples, dtype=np.float64) / sample_rate
+    rng = np.random.default_rng(seed)
+    if kind == "tone":
+        signal = amplitude * np.sin(2.0 * np.pi * freq * timeline)
+    elif kind == "noise":
+        signal = amplitude * 0.3 * rng.standard_normal(samples)
+    elif kind == "silence":
+        signal = np.zeros(samples)
+    else:
+        signal = np.zeros(samples)
+        half = samples // 2
+        signal[half:] = amplitude * np.sin(2.0 * np.pi * freq * timeline[half:])
+    pcm = np.clip(signal, -1.0, 1.0)
+    frames = (pcm * 32767.0).astype(np.int16)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate)
+        handle.writeframes(frames.tobytes())
+    return path
+
+
+def make_catalog_with_audio(
+    data_dir: Path,
+    *,
+    species: tuple[tuple[str, str], ...] = (("kos", "Turdus merula"), ("bogatka", "Parus major")),
+    per_species: int = 2,
+    seconds: float = 6.0,
+    kind: str = "tone",
+) -> list[dict[str, Any]]:
+    """Catalog + ``data/raw`` WAV files for offline cache tests."""
+    raw = data_dir / "raw"
+    raw.mkdir(parents=True, exist_ok=True)
+    entries: list[dict[str, Any]] = []
+    for species_index, (species_pl, latin) in enumerate(species):
+        for number in range(per_species):
+            recording_id = f"XC{100 + species_index * 10 + number}"
+            write_wav(
+                raw / f"{recording_id}.wav",
+                seconds=seconds,
+                freq=800.0 + species_index * 400.0,
+                kind=kind,
+                seed=number,
+            )
+            item = entry(
+                recording_id,
+                species_pl=species_pl,
+                recordist=f"rec-{species_index}",
+                file_name=f"{recording_id}.wav",
+            )
+            item["species_latin"] = latin
+            entries.append(item)
+    write_catalog(data_dir / "catalog.jsonl", entries)
+    return entries

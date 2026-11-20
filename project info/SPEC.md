@@ -1,6 +1,6 @@
 # SPEC.md — bird_recognizer
 
-> Wersja 1.2 · 2026-11-18 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
+> Wersja 1.3 · 2026-11-20 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
 > Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium: `https://github.com/DomDom2005/bird_recognizer` — **`TODO(verify)`**: potwierdzić nazwę repo i branch (`main`) u człowieka, zanim wklei się to do README.
 
 ---
@@ -9,7 +9,7 @@
 
 1. **Dokumentacja xeno-canto wygrywa z tym plikiem.** Przed każdą zmianą w module `xc/` sprawdź https://xeno-canto.org/explore/api. Jeśli dokumentacja przeczy SPEC-owi, wygrywa dokumentacja. Rozbieżność zapisz w sekcji „Odstępstwa od SPEC” w `docs/ai-journal.md` i popraw SPEC.
 2. **Niczego nie zgaduj.** Sekcja 4 rozdziela fakty zweryfikowane od rzeczy „DO ZWERYFIKOWANIA”. Nie wymyślaj nazw pól, parametrów zapytań ani liczb (w tym: liczby gatunków w BirdNET, limitów API, wersji bibliotek). Brak weryfikacji → `TODO(verify)` w kodzie i wpis w README.
-3. **Nie masz dostępu do klucza API ani do nagrań, dopóki człowiek ich nie dostarczy.** Cała ścieżka kodu musi działać offline: testy na mockach, a pipeline na małym syntetycznym zbiorze (`scripts/make_synthetic_demo.py`, FR-15). Kroki wymagające konta xeno-canto wykonuje człowiek (sekcja 16).
+3. **Nie masz dostępu do klucza API ani do nagrań, dopóki człowiek ich nie dostarczy.** Cała ścieżka kodu musi działać offline: testy na mockach i na krótkich WAV-ach generowanych w `tests/support.py` (`tmp_dir`), bez sieci. Kroki wymagające konta xeno-canto wykonuje człowiek (sekcja 16).
 4. **Żadnych sekretów w repo, logach, testach ani przykładach.** Klucz API xeno-canto jest **osobisty i odwoływalny** — wyciek kończy się unieważnieniem klucza. Szczegóły w sekcji 13.
 5. **Pracuj etapami i tylko etapami** (sekcja 15). Nie zaczynaj etapu, którego poprzednik nie ma `[x]` w tabeli 15.1. Po każdym etapie: bramka zielona, `ruff check`, `pytest`, commit, wpis w `docs/ai-journal.md` i zmieniony wiersz w tabeli 15.1 — w tym samym commicie.
 6. **Dziennik AI (`docs/ai-journal.md`) prowadź uczciwie i na bieżąco.** Zapisuj, w czym pomogłeś i gdzie się pomyliłeś lub musiałeś zmienić założenie. Niczego nie upiększaj ani nie dopisuj na zapas.
@@ -199,7 +199,6 @@ bird_recognizer/
 │   └── cli.py
 ├── scripts/
 │   ├── probe_api.py           # weryfikacja punktów z 4.3 (jeden request)
-│   ├── make_synthetic_demo.py # mały syntetyczny zbiór offline (FR-15)
 │   └── check_leakage.py       # kontrola podziału i duplikatów (FR-3)
 ├── tests/
 │   ├── conftest.py            # blokada gniazd, tmp katalogi danych
@@ -254,7 +253,7 @@ Katalogi poza repo (gitignore): `data/` (`raw/`, `cache/`, `own/`, `catalog.json
 
 **FR-14 Raport.** `report --runs ... --out docs/experiments.md`: generuje tabelę wyników (model, okno, augmentacje, pretrained, pooling, macro-F1 nagranie, top-3, różnica względem referencji), sekcję „wnioski” wypełnianą ręcznie przez człowieka, listę runów z seedami.
 
-**FR-15 Tryb offline.** `scripts/make_synthetic_demo.py` tworzy mały, deterministyczny zbiór: 4 klasy × 6 „nagrań” × 20 s, zsyntetyzowane z szumu i tonów o różnych profilach. Służy do testów end-to-end i do demo bez internetu. **Każdy wynik z takich danych musi być oznaczony „DANE SYNTETYCZNE”**; nigdy nie mieszaj ich z `data/raw` (osobny katalog `data/synthetic/` i osobny `runs/`-prefix `synth-`).
+**FR-15 Tryb offline.** Testy nie potrzebują sieci ani prawdziwych nagrań: `tests/support.py` generuje deterministyczne WAV-y (krótkie tony/szumy) w `tmp_dir`, a pipeline jest sprawdzany na nich end-to-end. `--smoke` w etapach 4–6 korzysta z **realnego** katalogu z limitem nagrań na gatunek (`--limit`), nie z osobnego zbioru syntetycznego — nie ma więc katalogu `data/synthetic/` ani prefiksu `synth-`.
 
 **FR-16 Weryfikacja API.** `scripts/probe_api.py` ma dwa tryby: `--dry-run` (waliduje config i wypisuje złożone query, **żadnego requestu**) i `--live` (jedno zapytanie na punkt z sekcji 4.3, `per_page=50`, bez pobierania audio), który wypisuje ustalenia do przepisania w `docs/api-notes.md`. `--live` wymaga klucza i kończy się czytelnym komunikatem, jeśli go brakuje — `--dry-run` działa bez klucza i bez sieci, więc może być używany w testach i w bramce etapu 1.
 
@@ -328,7 +327,7 @@ Katalogi poza repo (gitignore): `data/` (`raw/`, `cache/`, `own/`, `catalog.json
 
 ### 7.4 `data/cache/<id>/`
 
-`mel.npy` (float16, `(n, 128, T)`), `meta.json` (sekcja FR-4). Rozmiar: ok. 48 KB na okno (128×188×2 B) → dla ~1000 min audio przy hopie 1,5 s to rząd **2 GB**; zmierz realny rozmiar i podaj w README. Cache jest w pełni odtwarzalny z `data/raw` — nigdy nie jest źródłem prawdy.
+`mel.npy` (float16, `(n_kept, 128, 188)`), `meta.json` (geometria, `rms` **wszystkich** okien, `kept`, `valid_frames`, `config_hash`, `sha256_audio`, `created_at`). Zmierzone 2026-11-20: **~1,5 MB na minutę audio** (521 okien × 48 KB = 24 MB dla 15,8 min) → dla pełnego zbioru (~3738 min) rząd **5,6 GB**. Cache jest w pełni odtwarzalny z `data/raw` — nigdy nie jest źródłem prawdy.
 
 ---
 
@@ -338,7 +337,7 @@ Katalogi poza repo (gitignore): `data/` (`raw/`, `cache/`, `own/`, `catalog.json
 bird_recognizer data catalog  [--species NAME ...] [--refresh] [--country poland]
 bird_recognizer data download [--species NAME ...] [--limit N] [--retry-failed] [--force]
 bird_recognizer data split    [--seed 42] [--force]
-bird_recognizer prep cache    [--species NAME ...] [--force] [--verify]
+bird_recognizer prep cache    [--species NAME ...] [--limit N] [--force] [--verify]
 bird_recognizer train mfcc    [--clf {svm,rf}] [--deltas]
 bird_recognizer train cnn     [--window 3] [--aug basic|full|none]
 bird_recognizer train transfer --arch {resnet18,efficientnet_b0} [--pretrained|--scratch]
@@ -353,7 +352,7 @@ bird_recognizer report        --runs RUN [RUN ...] --out docs/experiments.md
 
 Globalne opcje: `--config PATH` (domyślnie `configs/default.yaml`), `--data-dir PATH`, `--runs-dir PATH`, `--device {cpu,cuda,mps}`, `--seed INT`, `--smoke`, `-v/--verbose`. Komunikaty i pomoc po polsku.
 
-Skrypty pomocnicze: `python scripts/probe_api.py`, `python scripts/check_leakage.py`, `python scripts/make_synthetic_demo.py`.
+Skrypty pomocnicze: `python scripts/probe_api.py`, `python scripts/check_leakage.py`.
 
 ---
 
@@ -400,7 +399,7 @@ Wszystko w `configs/default.yaml`; tabela jest **źródłem prawdy dla wartości
 
 ### 10.2 Bramkowanie ciszy (FR-4)
 
-Energia okna = RMS. Odrzuć okno, jeśli `rms < max(abs_floor, rel_floor × p90(rms nagrania))`, gdzie `abs_floor = 1e-3` (≈ −60 dBFS), `rel_floor = 0.1`. Progi są w configu; raportuj, ile procent okien odpadło per gatunek (to wpływa na interpretację wyników).
+Energia okna = RMS. Odrzuć okno, jeśli `rms < max(abs_floor, rel_floor × p90(rms nagrania))`, gdzie `abs_floor = 1e-3` (≈ −60 dBFS), `rel_floor = 0.1`. Progi są w configu; raportuj, ile procent okien odpadło per gatunek (to wpływa na interpretację wyników). **Pomiar 2026-11-20 (24 nagrania):** odrzucone 18,6% okien; 2 nagrania (peak −42 i −34 dBFS) odpadły **całkowicie** przez `abs_floor` — to nagrania bardzo ciche, poniżej progu użyteczności; decyzja: progi zostają, a takie nagrania są raportowane jako `empty_after_gating`.
 
 ### 10.3 Augmentacje (`--aug`)
 
@@ -522,7 +521,7 @@ Struktura: problem i pytanie badawcze → dane (źródło, licencje, liczebnoś�
 2. **Dane** — xeno-canto, filtr (`sp`, `cnt`, `q:">C"`, `status:identified`), liczebność, licencje i atrybucja, podział.
 3. **Schemat przepływu danych** — diagram Mermaid z sekcji 5.
 4. **Instrukcja uruchomienia** — Python, `requirements.txt`, `.env` (klucz API), `data catalog` → `data download` → `data split` → `prep cache` → `train` → `eval` → `demo`; tabela zmiennych i opcji configu.
-5. **Tryb bez internetu** — `scripts/make_synthetic_demo.py` i `--smoke`.
+5. **Tryb bez internetu** — testy z generowanymi WAV-ami (`tests/support.py`) i `--smoke` na realnym katalogu.
 6. **Wyniki** — tabela ablacji (odnośnik do `docs/experiments.md`), wynik test vs zbiór własny.
 7. **Testy** — jak uruchomić, co pokrywają, polityka offline.
 8. **Struktura repo** — drzewo z sekcji 5.
@@ -553,7 +552,7 @@ Dodatkowo: `docs/experiments.md` (generowany + wnioski), `docs/manual-checklist.
 |---|---|---|---|---|---|
 | 1 | Zakres, decyzje i szkielet repo | M | — | klucz API, zgoda na D1 | `[x]` 2026-11-02 |
 | 2 | Dane: katalog, pobieranie, podział | L | 1 | — | `[x]` 2026-11-18 |
-| 3 | Preprocessing i cache spektrogramów | M | 2 | — | `[ ]` |
+| 3 | Preprocessing i cache spektrogramów | M | 2 | — | `[x]` 2026-11-20 |
 | 4 | Baseline: MFCC+SVM i mały CNN | L | 3 | — | `[ ]` |
 | 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[ ]` |
 | 6 | Eksperymenty i ablacje | L | 5 | — | `[ ]` |
@@ -682,33 +681,37 @@ python scripts/check_leakage.py --data-dir tests/fixtures/synthetic_data
 
 **Cel:** deterministyczny, odtwarzalny cache okien z log-mel, gotowy dla wszystkich modeli.
 **Zależy od:** 2 · **Czyta:** §6 (FR-4, FR-15), §7.4, §10.1–10.2, §12
-**Tworzy/zmienia:** `data/{audio,spectrogram,windows,dataset}.py`, `cli.py` (`prep cache`), `scripts/make_synthetic_demo.py`, `tests/test_{audio,windows,spectrogram,dataset}.py`.
+**Tworzy/zmienia:** `data/{audio,spectrogram,windows,dataset}.py`, `cli.py` (`prep cache`), `tests/support.py` (generator WAV), `tests/test_{audio,windows,spectrogram,dataset}.py`.
 **Zadania**
 
-- [ ] `audio.py`: odczyt (torchaudio/soundfile), mono, resample do 32 kHz, HPF 100 Hz rząd 4.
-- [ ] `windows.py`: okna 3 s / hop 1,5 s, krótkie ostatnie okno zachowane, `starts_s`, `rms`.
-- [ ] bramkowanie ciszy z progami §10.2; `kept` i udział odrzuconych w `meta.json`.
-- [ ] `spectrogram.py`: parametry §10.1, `AmplitudeToDB`, normalizacja per okno, walidacja `fmax < sr/2`.
-- [ ] cache §7.4: `mel.npy` float16 + `meta.json` z `config_hash`; `--verify` wykrywa niezgodność, `--force` przelicza.
-- [ ] `dataset.py`: float16 → float32, etykiety z `species.yaml`, maska długości.
-- [ ] `make_synthetic_demo.py`: 4 klasy × 6 nagrań × 20 s, deterministyczny, **osobny katalog** i prefix `synth-`.
+- [x] `audio.py`: odczyt (soundfile — czyta mp3; torchaudio tylko do resamplingu), mono, resample do 32 kHz, HPF 100 Hz rząd 4.
+- [x] `windows.py`: okna 3 s / hop 1,5 s, krótkie ostatnie okno zachowane i dopełnione zerami, `starts_s`, `lengths`, `rms`, `valid_frames`.
+- [x] bramkowanie ciszy z progami §10.2; `kept` i udział odrzuconych w `meta.json`.
+- [x] `spectrogram.py`: parametry §10.1, `AmplitudeToDB`, normalizacja per okno, walidacja `fmax < sr/2`, `config_hash`.
+- [x] cache §7.4: `mel.npy` float16 + `meta.json` z `config_hash`; `--verify` wykrywa niezgodność, `--force` przelicza.
+- [x] `dataset.py`: float16 → float32, etykiety z `species.yaml`, maska długości (`valid_frames`).
+- [x] `tests/support.py`: deterministyczny generator WAV (ton/szum/cisza) do testów offline — **bez** zbioru syntetycznego w repo.
+
+**Wynik na żywych danych (2026-11-20, `--limit 24`):** przetworzone 22, pominięte 0, błędy 2
+(`empty_after_gating` — nagrania o peaku −42 i −34 dBFS, poniżej `abs_floor`); okna 521/640
+(odrzucone 18,6%), audio 15,8 min, cache **24 MB** (~1,5 MB/min); `--verify` OK; dwa przebiegi
+dają identyczne `mel.npy`.
 
 **Bramka**
 
 ```bash
 pytest -q --cov=bird_recognizer.data --cov-report=term-missing
-python scripts/make_synthetic_demo.py --out data/synthetic
-bird_recognizer prep cache --data-dir data/synthetic
-bird_recognizer prep cache --data-dir data/synthetic --verify
+python -m bird_recognizer.cli prep cache --limit 24
+python -m bird_recognizer.cli prep cache --limit 24 --verify
 ```
 
-- Pokrycie modułów `data/` (poza `splits.py`) ≥ 80%.
-- Cache powstaje dla wszystkich nagrań syntetycznych; `--verify` przechodzi.
+- Pokrycie modułów `data/` (audio, windows, spectrogram, dataset) ≥ 80%.
+- Cache powstaje dla 24 realnych nagrań; `--verify` przechodzi.
 - Dwa przebiegi `prep cache` dają identyczne `mel.npy` (test hasha).
-- Raport pokazuje udział odrzuconych okien per klasa.
+- Raport pokazuje udział odrzuconych okien per gatunek.
 
 **Commit:** `feat(prep): windowed log-mel cache and silence gating` · **Dziennik:** ile okien odpada przy bramkowaniu i czy progi nie są za agresywne.
-**Stop, jeśli:** dekoder nie czyta mp3 (brak ffmpeg) → zapisz wymóg w README i używaj wav w syntetyku; nie zmieniaj parametrów z §10 bez wpisu.
+**Stop, jeśli:** dekoder nie czyta mp3 → sprawdź backend torchaudio/soundfile, zapisz wymóg w README; nie zmieniaj parametrów z §10 bez wpisu.
 
 ### 15.9 Etap 4 — Baseline: MFCC+SVM i mały CNN
 
@@ -728,12 +731,12 @@ bird_recognizer prep cache --data-dir data/synthetic --verify
 
 ```bash
 pytest -q --cov=bird_recognizer.models --cov=bird_recognizer.train --cov-report=term-missing
-bird_recognizer train mfcc --data-dir data/synthetic --smoke
-bird_recognizer train cnn  --data-dir data/synthetic --smoke
+bird_recognizer train mfcc --smoke
+bird_recognizer train cnn  --smoke
 ```
 
 - Pokrycie `models/` i `train/` ≥ 80%.
-- Oba treningi kończą się w ≤ 10 min na CPU; na syntetyku loss maleje, `best.pt` powstaje.
+- Oba treningi kończą się w ≤ 10 min na CPU; na realnym podzbiorze (`--smoke`) loss maleje, `best.pt` powstaje.
 - Dwa runy z tym samym seedem na CPU dają identyczne `val_macro_f1` (test).
 - Każdy run ma `config.yaml`, `env.txt`, `metrics.json`, wpis w `index.csv`.
 
@@ -751,14 +754,14 @@ bird_recognizer train cnn  --data-dir data/synthetic --smoke
 - [ ] `crnn.py`: backbone z etapu 4 → BiGRU(hidden 128, dropout 0,3) → pooling `mean`/`attention`; maskowanie długości w loss i poolingu.
 - [ ] `augment.py` wariant `full`: mixup (α=0,4) i SpecAugment zgodnie z §10.3.
 - [ ] `models_registry.py`: nazwa modelu → klasa + fabryka z configu (CLI nie zna konkretnych klas).
-- [ ] trening na realnym wycinku, jeśli człowiek pobrał dane (inaczej `--smoke` na syntetyku i jawna adnotacja w raporcie).
+- [ ] trening na realnym wycinku, jeśli człowiek pobrał dane (inaczej `--smoke` na realnym katalogu z limitem i jawna adnotacja w raporcie).
 
 **Bramka**
 
 ```bash
 pytest -q
-bird_recognizer train crnn --data-dir data/synthetic --smoke
-bird_recognizer train transfer --arch resnet18 --scratch --data-dir data/synthetic --smoke
+python -m bird_recognizer.cli train crnn --smoke
+python -m bird_recognizer.cli train transfer --arch resnet18 --scratch --smoke
 ```
 
 - CRNN przechodzi test dla T=188 **i** T=50 (zmienne okno); pooling `mean` i `attention` dają różne wyjścia na tych samych danych wejściowych.
@@ -919,4 +922,4 @@ Tylko po zamknięciu etapu 8 i po decyzji człowieka (D12). Warianty: embeddingi
 7. Lokalny rejestr runów zamiast W&B jako wymóg; W&B tylko opcjonalnie i w trybie offline.
 8. Gradio zamiast Streamlita (D9) — prostsze demo plik→wynik.
 9. Brak bazy danych (SQLite) — katalog to JSONL + `splits.json`; model danych nie wymaga zapytań relacyjnych, a JSONL jest czytelny w diffach.
-10. Testy nigdy nie dotykają sieci ani audio z xeno-canto; wszystko, co wymaga danych, idzie przez `make_synthetic_demo.py`.
+10. Testy nigdy nie dotykają sieci ani audio z xeno-canto; dane do testów generuje `tests/support.py` w `tmp_dir`, a `--smoke` korzysta z realnego katalogu z `--limit`.

@@ -16,10 +16,9 @@ pytest tests/test_splits.py -k recordist  # pojedynczy plik / wzorzec
 
 python scripts/probe_api.py --dry-run     # składa query bez sieci (SPEC §4.3)
 python scripts/probe_api.py --live        # jeden request na punkt 4.3 — wymaga klucza
-python scripts/make_synthetic_demo.py     # mały zbior offline do testów i demo
 bird_recognizer data catalog && bird_recognizer data download && bird_recognizer data split
 python scripts/check_leakage.py --data-dir data   # ZAWSZE przed treningiem
-bird_recognizer prep cache
+bird_recognizer prep cache --limit 24 && bird_recognizer prep cache --limit 24 --verify
 bird_recognizer train crnn --pool attention --smoke
 bird_recognizer eval --run RUN --split test
 bird_recognizer demo --run RUN
