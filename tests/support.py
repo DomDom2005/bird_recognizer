@@ -251,7 +251,7 @@ def make_catalog_with_audio(
             item = entry(
                 recording_id,
                 species_pl=species_pl,
-                recordist=f"rec-{species_index}",
+                recordist=f"rec-{species_index}-{number}",
                 file_name=f"{recording_id}.wav",
             )
             item["species_latin"] = latin

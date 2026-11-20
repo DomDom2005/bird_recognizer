@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections import OrderedDict, defaultdict
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -378,3 +379,126 @@ def iter_cached_windows(
         recording = load_recording(record_dir, labels)
         for index in range(recording.mel.shape[0]):
             yield recording.mel[index], recording.label, recording.mask[index]
+
+
+# --------------------------------------------------------------------------- #
+# Window index for training (SPEC FR-9)
+# --------------------------------------------------------------------------- #
+def raw_audio_path(data_dir: Path, recording_id: str) -> Path | None:
+    """Path of the downloaded audio file for a recording, if present."""
+    return _find_audio(Path(data_dir) / RAW_DIRNAME, recording_id)
+
+
+def kept_windows(meta: Mapping[str, Any]) -> list[tuple[int, int]]:
+    """``(start_sample, length_samples)`` of every kept window, in cache order."""
+    kept = [bool(value) for value in meta.get("kept", [])]
+    lengths = [int(value) for value in meta.get("lengths", [])]
+    hop = int(meta.get("hop_samples", 0) or 0)
+    if not kept or not lengths or hop <= 0:
+        return []
+    return [
+        (position * hop, lengths[position])
+        for position, keep in enumerate(kept)
+        if keep and position < len(lengths)
+    ]
+
+
+@dataclass(frozen=True)
+class WindowRef:
+    """One cached window: enough information to load it lazily."""
+
+    recording_id: str
+    cache_dir: Path
+    window: int
+    label: int
+    species_pl: str
+
+
+def build_window_index(
+    config: Config,
+    data_dir: Path,
+    *,
+    split: str | None = None,
+    limit_per_species: int | None = None,
+) -> list[WindowRef]:
+    """Index cached windows, optionally restricted to a split and species budget."""
+    labels = config.species_labels()
+    wanted: set[str] | None = None
+    if split is not None:
+        from .splits import load_splits, splits_path
+
+        plan = load_splits(splits_path(data_dir))
+        wanted = set(plan.splits.get(split, []))
+    per_species: dict[str, int] = defaultdict(int)
+    refs: list[WindowRef] = []
+    for record_dir in list_cache(data_dir):
+        meta = _read_meta(record_dir / META_FILENAME)
+        if meta is None:
+            continue
+        recording_id = str(meta.get("id", record_dir.name))
+        if wanted is not None and recording_id not in wanted:
+            continue
+        species_pl = str(meta.get("species_pl", ""))
+        if species_pl not in labels:
+            continue
+        if limit_per_species is not None and per_species[species_pl] >= limit_per_species:
+            continue
+        per_species[species_pl] += 1
+        label = int(labels[species_pl])
+        for window in range(int(meta.get("n_kept") or 0)):
+            refs.append(
+                WindowRef(
+                    recording_id=recording_id,
+                    cache_dir=record_dir,
+                    window=window,
+                    label=label,
+                    species_pl=species_pl,
+                )
+            )
+    refs.sort(key=lambda ref: (ref.recording_id, ref.window))
+    return refs
+
+
+class WindowDataset:
+    """Map-style dataset over cached windows with a small per-recording LRU cache."""
+
+    def __init__(self, refs: list[WindowRef], *, cache_size: int = 16) -> None:
+        if not refs:
+            raise DataError("pusta lista okien — sprawdź split, cache i config gatunków")
+        self.refs = list(refs)
+        self.labels = [ref.label for ref in self.refs]
+        self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._cache_size = max(1, cache_size)
+
+    def __len__(self) -> int:
+        return len(self.refs)
+
+    def __getitem__(self, index: int) -> tuple[np.ndarray, int]:
+        ref = self.refs[index]
+        mel = self._recording(ref.cache_dir, ref.recording_id)
+        if ref.window >= mel.shape[0]:
+            raise DataError(
+                f"{ref.recording_id}: okno {ref.window} poza cache ({mel.shape[0]})"
+            )
+        return mel[ref.window], int(ref.label)
+
+    def groups(self) -> list[str]:
+        """Recording id of every window, aligned with item order."""
+        return [ref.recording_id for ref in self.refs]
+
+    def recording_ids(self) -> list[str]:
+        return sorted({ref.recording_id for ref in self.refs})
+
+    def _recording(self, cache_dir: Path, recording_id: str) -> np.ndarray:
+        cached = self._cache.get(recording_id)
+        if cached is not None:
+            self._cache.move_to_end(recording_id)
+            return cached
+        path = Path(cache_dir) / MEL_FILENAME
+        if not path.is_file():
+            raise DataError(f"{cache_dir}: brak {MEL_FILENAME}")
+        array = np.load(path).astype(np.float32)
+        self._cache[recording_id] = array
+        if len(self._cache) > self._cache_size:
+            self._cache.popitem(last=False)
+        return array

@@ -339,7 +339,7 @@ bird_recognizer data download [--species NAME ...] [--limit N] [--retry-failed] 
 bird_recognizer data split    [--seed 42] [--force]
 bird_recognizer prep cache    [--species NAME ...] [--limit N] [--force] [--verify]
 bird_recognizer train mfcc    [--clf {svm,rf}] [--deltas]
-bird_recognizer train cnn     [--window 3] [--aug basic|full|none]
+bird_recognizer train cnn     [--window 3] [--aug basic|full|none] [--epochs N]
 bird_recognizer train transfer --arch {resnet18,efficientnet_b0} [--pretrained|--scratch]
 bird_recognizer train crnn    [--pool {mean,attention}] [--rnn {gru,lstm}]
 bird_recognizer eval          --run RUN [--split {val,test,own}]
@@ -412,6 +412,11 @@ Energia okna = RMS. Odrzuć okno, jeśli `rms < max(abs_floor, rel_floor × p90(
 |SpecAugment|2 maski częstotliwości ≤16 pasm, 2 maski czasu ≤20 ramek|ablacja: wyłącz|
 
 Augmentacje **tylko** na trainie; walidacja i test zawsze czyste. To jest warunek porównywalności runów.
+
+**Stan po etapie 4:** zaimplementowane przesunięcie w czasie i szum addytywny (na znormalizowanych
+ramkach mel). **Wzmocnienie (gain) jest pominięte**, bo cache trzyma spektrogramy znormalizowane
+per okno — stała zmiana poziomu znosi się przy normalizacji (dziennik, odstępstwo 23). `mixup`
+i SpecAugment dochodzą w etapie 5 (preset `full` na razie ostrzega i używa `basic`).
 
 ### 10.4 Modele
 
@@ -553,7 +558,7 @@ Dodatkowo: `docs/experiments.md` (generowany + wnioski), `docs/manual-checklist.
 | 1 | Zakres, decyzje i szkielet repo | M | — | klucz API, zgoda na D1 | `[x]` 2026-11-02 |
 | 2 | Dane: katalog, pobieranie, podział | L | 1 | — | `[x]` 2026-11-18 |
 | 3 | Preprocessing i cache spektrogramów | M | 2 | — | `[x]` 2026-11-20 |
-| 4 | Baseline: MFCC+SVM i mały CNN | L | 3 | — | `[ ]` |
+| 4 | Baseline: MFCC+SVM i mały CNN | L | 3 | — | `[x]` 2026-11-20 |
 | 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[ ]` |
 | 6 | Eksperymenty i ablacje | L | 5 | — | `[ ]` |
 | 7 | Ewaluacja i analiza błędów | M | 6 | własne nagrania z telefonu | `[ ]` |
@@ -720,12 +725,18 @@ python -m bird_recognizer.cli prep cache --limit 24 --verify
 **Tworzy/zmienia:** `models/mfcc_baseline.py`, `models/cnn.py`, `models_registry.py`, `train/{augment,loop,runner}.py`, `cli.py` (`train mfcc`, `train cnn`), `tests/test_{runner,loop,cnn,augment}.py`.
 **Zadania**
 
-- [ ] MFCC + mean/std → `StandardScaler` dopasowany **na trainie** → SVM (`class_weight=balanced`) / RF.
-- [ ] mały CNN (4 bloki, GAP, dropout 0,3), predykcja nagrania = średnia po oknach.
-- [ ] `loop.py`: ważenie klas, early stopping po val macro-F1, gradient clipping, checkpoint.
-- [ ] `runner.py`: `run_id`, seed, snapshot configu, `git_sha`, wersje bibliotek, `metrics.jsonl`, `runs/index.csv`.
-- [ ] `augment.py`: przesunięcie, gain, szum (wariant `basic`); `mixup` i SpecAugment dopiero w etapie 5.
-- [ ] seed w jednym miejscu (python/numpy/torch/cuda) i flaga `--smoke`.
+- [x] MFCC + mean/std → `StandardScaler` dopasowany **na trainie** → SVM (`class_weight=balanced`) / RF.
+- [x] mały CNN (4 bloki, GAP, dropout 0,3), predykcja nagrania = średnia po oknach.
+- [x] `loop.py`: ważenie klas, early stopping po val macro-F1, gradient clipping, checkpoint.
+- [x] `runner.py`: `run_id`, seed, snapshot configu, `git_sha`, wersje bibliotek, `metrics.jsonl`, `runs/index.csv`.
+- [x] `augment.py`: przesunięcie i szum (wariant `basic`); **gain pominięty** (cache jest znormalizowany per okno — patrz dziennik, odstępstwo 23); `mixup` i SpecAugment w etapie 5.
+- [x] seed w jednym miejscu (python/numpy/torch/cuda) i flaga `--smoke`.
+
+**Wynik (2026-11-20):** 170 testów, pokrycie `models/` 83–100% i `train/` 93–100% (razem 92%).
+`train mfcc --smoke`: 173 okna treningowe, SVM < 1 s, run zapisany (`model.joblib`, `metrics.json`,
+wpis w `index.csv`). `train cnn --smoke`: **391 404 parametry**, 1 epoka ≈ 23 s na CPU;
+przy `--epochs 2` train loss spada 1,74 → 0,81; dwa przebiegi z tym samym seedem dają
+**identyczne** metryki (0,190 recording macro-F1 na val).
 
 **Bramka**
 

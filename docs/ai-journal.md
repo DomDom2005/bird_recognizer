@@ -13,6 +13,8 @@
 | 2026-11-18 | 2 | uruchomienie na żywo: `data catalog` (2917 nagrań), `data split` (2203/407/307), `data download --limit 2` (3,3 MB) i ponowne uruchomienie (wznawianie: 2 pominięte) | `check_leakage.py --data-dir data` → brak wycieku; raport pobierania i `sha256_audio` w katalogu | trafne; live run wykrył błąd podziału, którego testy nie łapały |
 | 2026-11-20 | 3 | `data/audio.py` (soundfile — czyta mp3, torchaudio tylko do resamplingu, HPF Butterwortha), `data/windows.py` (3 s / 1,5 s, dopełnianie ogona, bramka RMS), `data/spectrogram.py` (log-mel 128 pasm, normalizacja per okno, `config_hash`), `data/dataset.py` (cache float16 + meta, `--verify`, etykiety, maska), CLI `prep cache`, generator WAV w testach zamiast zbioru syntetycznego | bramka etapu 3: `ruff check .` czysty, 136 testów, pokrycie data 88–100%, `prep cache --limit 24` + `--verify` exit 0 | trafne po korektach (odstępstwa 19–22) |
 | 2026-11-20 | 3 | pomiar na żywych nagraniach: 22/24 przetworzone, 2 odrzucone przez `abs_floor`, 521/640 okien (18,6% odpadło), 15,8 min audio, cache 24 MB | `--verify` OK, dwa przebiegi dają identyczne `mel.npy` | trafne; rozmiar cache okazał się ~3× większy niż szacunek SPEC |
+| 2026-11-20 | 4 | `models/cnn.py` (4 bloki, 391 404 param.), `models_registry.py`, `models/mfcc_baseline.py` (MFCC+SVM/RF, cechy z tych samych okien co cache), `train/{augment,loop,runner}.py`, `eval/metrics.py` (potrzebne do early stoppingu), CLI `train mfcc/cnn`, `--smoke`, `--runs-dir`, `--epochs`, cache rozszerzony do 801 nagrań | bramka etapu 4: `ruff check .` czysty, 170 testów, pokrycie `models/` 83–100% i `train/` 93–100%, oba `--smoke` exit 0, dwa przebiegi CNN z tym samym seedem identyczne | trafne po naprawie determinizmu (odstępstwo 24) |
+| 2026-11-20 | 4 | pomiar na realnym podzbiorze (2 nagrania/gatunek): CNN 1 epoka ≈ 23 s CPU, `--epochs 2` → train loss 1,74 → 0,81; MFCC/SVM < 1 s; runs mają `config.yaml`, `env.txt`, `best.pt`/`model.joblib`, `metrics.jsonl`, wpis w `index.csv` | ponowne uruchomienie identyczne; `runs/index.csv` z 8 przebiegami | trafne |
 
 ## Odstępstwa od SPEC
 
@@ -110,6 +112,24 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     `1058630` (peak −34 dBFS) mają RMS poniżej `abs_floor = 1e-3`; dla porównania normalne
     nagranie ma peak 0,70 i RMS 0,039. Progi zostają (to nagrania poniżej progu użyteczności),
     a przypadki są raportowane jako `empty_after_gating`; nota w SPEC §10.2 i README.
+23. **Gain (wzmocnienie) pominięty w augmentacjach.** Cache trzyma spektrogramy znormalizowane
+    per okno, więc dodanie stałej w dB znosi się przy normalizacji — augmentacja byłaby
+    matematycznie identycznością. Zaimplementowane: przesunięcie w czasie i szum. Powrót gain
+    wymaga przeniesienia normalizacji do ładowania (etap 5) albo usunięcia go z listy; SPEC
+    §10.3 opisuje stan.
+24. **Model tworzony przed `set_seed` (błąd determinizmu, złapany przez bramkę).** Dwa przebiegi
+    `train cnn --smoke` dały różne metryki (0,822 vs 0,190), bo wagi powstawały przed ustawieniem
+    seeda, a torch startuje z losowym stanem procesu. Naprawa: `set_seed(config.seed)` w CLI
+    **przed** `build_model`, docstring w `train_cnn` oraz test determinizmu, który seeduje przed
+    utworzeniem modelu. Po naprawie dwa osobne uruchomienia dają identyczne metryki.
+25. **`eval/metrics.py` powstał w etapie 4.** Early stopping potrzebuje macro-F1, a stage 5 ma
+    dopiero `eval/*`. Wyciągnąłem czyste funkcje metryk wcześniej; etap 5 rozbuduje je o
+    agregację, macierz pomyłek i analizę błędów (bez duplikacji).
+26. **`top_k_accuracy` zwraca `None`, gdy k ≥ liczba klas.** W smoke runach obecne są 3 klasy,
+    więc top-3 byłby trywialnie 1,0 i mylący; CLI pokazuje `n/d`, a `index.csv` zostawia puste
+    pole. Na pełnych 12 klasach top-3 liczy się normalnie.
+27. **Dodatkowe flagi CLI:** `--runs-dir` (był w SPEC §8, brakowało go w parserze) i `--epochs`
+    w `train cnn` (dev, do sprawdzenia spadku lossu na podzbiorze; SPEC §8 zaktualizowane).
 
 ## Wznowienie po przerwie (2026-11-18)
 

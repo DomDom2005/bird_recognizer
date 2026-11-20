@@ -20,6 +20,8 @@ def _argv(tmp_dir: Path, *rest: str) -> list[str]:
         str(tmp_dir / "nonexistent.env"),
         "--data-dir",
         str(tmp_dir / "data"),
+        "--runs-dir",
+        str(tmp_dir / "runs"),
         *rest,
     ]
 
@@ -92,3 +94,44 @@ def test_prep_cache_builds_and_verifies(tmp_dir: Path) -> None:
 
 def test_prep_cache_verify_without_cache_exits_three(tmp_dir: Path) -> None:
     assert main(_argv(tmp_dir, "prep", "cache", "--verify")) == 3
+
+
+# --------------------------------------------------------------------------- #
+# train (etap 4)
+# --------------------------------------------------------------------------- #
+def _seed_trainable(tmp_dir: Path) -> Path:
+    data_dir = tmp_dir / "data"
+    make_catalog_with_audio(data_dir, per_species=4)
+    assert main(_argv(tmp_dir, "prep", "cache")) == 0
+    assert main(_argv(tmp_dir, "data", "split")) == 0
+    return data_dir
+
+
+def test_train_mfcc_smoke_writes_run(tmp_dir: Path) -> None:
+    data_dir = _seed_trainable(tmp_dir)
+    assert main(_argv(tmp_dir, "--smoke", "train", "mfcc")) == 0
+    assert (tmp_dir / "runs" / "index.csv").is_file()
+    run_dirs = [path for path in (tmp_dir / "runs").iterdir() if path.is_dir()]
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "metrics.json").is_file()
+    assert (run_dirs[0] / "model.joblib").is_file()
+    assert data_dir.is_dir()
+
+
+def test_train_cnn_smoke_writes_checkpoint(tmp_dir: Path) -> None:
+    _seed_trainable(tmp_dir)
+    assert main(_argv(tmp_dir, "--smoke", "train", "cnn")) == 0
+    run_dirs = [path for path in (tmp_dir / "runs").iterdir() if path.is_dir()]
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "best.pt").is_file()
+    assert (run_dirs[0] / "metrics.json").is_file()
+    assert (run_dirs[0] / "metrics.jsonl").is_file()
+    index = (tmp_dir / "runs" / "index.csv").read_text(encoding="utf-8")
+    assert "cnn" in index
+
+
+def test_train_without_splits_exits_three(tmp_dir: Path) -> None:
+    data_dir = tmp_dir / "data"
+    make_catalog_with_audio(data_dir, per_species=4)
+    assert main(_argv(tmp_dir, "prep", "cache")) == 0
+    assert main(_argv(tmp_dir, "--smoke", "train", "cnn")) == 3

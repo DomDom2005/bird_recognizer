@@ -4,8 +4,8 @@ Klasyfikacja gatunku ptaka z nagrania: mel-spektrogramy, CNN, transfer wiedzy i 
 Projekt badawczy (studia AI), pytanie: **ile daje modelowanie czasu w porównaniu z modelem,
 który patrzy na spektrogram okna bez rekurencji?**
 
-> **Status: etap 2 z 8** (patrz `project info/SPEC.md` §15). Katalog nagrań, pobieranie audio
-> i podział train/val/test są gotowe; modele i wyniki pojawią się w etapach 3–6, demo w etapie 8.
+> **Status: etap 4 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, baseline MFCC+SVM
+> i mały CNN są gotowe; modele główne (transfer, CRNN) i ablacje w etapach 5–6, demo w etapie 8.
 
 ## 1. Cel i pytanie badawcze
 
@@ -70,11 +70,22 @@ bird_recognizer prep cache --limit 24   # okna + log-mel -> data/cache (float16)
 bird_recognizer prep cache --verify     # kontrola config_hash, kształtów i dtype
 ```
 
+Trening baseline'ów (etap 4):
+
+```bash
+bird_recognizer train mfcc --clf svm    # albo --clf rf
+bird_recognizer train cnn               # mały CNN bez rekurencji
+bird_recognizer --smoke train cnn       # szybki podzbiór (2 nagrania/gatunek, 1 epoka)
+```
+
+Każdy przebieg zapisuje `runs/<run_id>/{config.yaml, env.txt, metrics.json, metrics.jsonl,
+best.pt | model.joblib}` i dopisuje wiersz do `runs/index.csv`.
+
 Jeśli komenda `bird_recognizer` nie jest w PATH (tak jest na części instalacji Windows,
 gdzie `pip` instaluje skrypty do katalogu spoza PATH), użyj równoważnej formy
 `python -m bird_recognizer.cli …`.
 
-Kolejne kroki (etapy 3–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
+Kolejne kroki (etapy 5–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
 
 ## 5. Tryb bez internetu
 
@@ -85,21 +96,23 @@ Kolejne kroki (etapy 3–8) opisuje `project info/SPEC.md` §15: karta etapu = z
 
 ## 6. Wyniki
 
-Dla etapu 3: brak — modeli jeszcze nie ma. Tabela ablacji powstanie w `docs/experiments.md`
-generowanym z `runs/index.csv`. Wnioski badawcze dopisuje człowiek.
+Dla etapu 4: brak wyników badawczych — smoke runy służą tylko sprawdzeniu pipeline'u
+(CNN: 391 404 parametry, 1 epoka ≈ 23 s CPU; `--epochs 2` daje spadek train loss 1,74 → 0,81).
+Tabela ablacji powstanie w `docs/experiments.md` generowanym z `runs/index.csv` (etap 6).
+Wnioski badawcze dopisuje człowiek.
 
 ## 7. Testy
 
 ```bash
 pytest                 # całość, offline (gniazda zablokowane)
 ruff check .
-pytest --cov=bird_recognizer.xc --cov=bird_recognizer.data   # pokrycie etapów 2–3
+pytest --cov=bird_recognizer.models --cov=bird_recognizer.train   # pokrycie etapu 4
 ```
 
-Stan: **136 testów**; pokrycie `data/` 88–100% (audio 93%, dataset 88%, spectrogram 100%,
-windows 97%, splits 98%), `xc/` 90–94%. Zakres: konfiguracja, redakcja sekretów, blokada sieci,
-klient API (paginacja, `400`/`403`/`429`/`5xx`, backoff), katalog, pobieranie z wznawianiem,
-podział i kontrola wycieku, audio (resample, HPF), okna i bramka ciszy, log-mel, cache, CLI.
+Stan: **170 testów**; pokrycie `models/` 83–100%, `train/` 93–100% (razem 92%), `data/`
+88–100%, `xc/` 90–94%. Zakres: konfiguracja, redakcja sekretów, blokada sieci, klient API,
+katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache, modele, augmentacje,
+pętla treningu, metryki, runner i CLI.
 
 ## 8. Struktura repo
 
@@ -107,9 +120,12 @@ podział i kontrola wycieku, audio (resample, HPF), okna i bramka ciszy, log-mel
 bird_recognizer/
 ├── project info/          # SPEC.md, PLAN.md, AGENTS.md
 ├── configs/               # default.yaml (progi), species.yaml (12 gatunków)
-├── src/bird_recognizer/   # config, errors, logging_setup, cli
+├── src/bird_recognizer/   # config, errors, logging_setup, cli, models_registry
 │   ├── xc/                # client, catalog, download
-│   └── data/              # splits, audio, windows, spectrogram, dataset (cache)
+│   ├── data/              # splits, audio, windows, spectrogram, dataset (cache)
+│   ├── models/            # cnn, mfcc_baseline
+│   ├── train/             # augment, loop, runner
+│   └── eval/              # metrics (+ etap 5: aggregate, error_analysis)
 ├── scripts/               # probe_api.py, check_leakage.py
 ├── tests/                 # + fixtures/api, fixtures/synthetic_data, support.py (WAV-y)
 ├── docs/                  # api-notes, ai-journal, data-flow, manual-checklist

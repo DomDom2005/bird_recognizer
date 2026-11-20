@@ -19,6 +19,7 @@ python scripts/probe_api.py --live        # jeden request na punkt 4.3 — wymag
 bird_recognizer data catalog && bird_recognizer data download && bird_recognizer data split
 python scripts/check_leakage.py --data-dir data   # ZAWSZE przed treningiem
 bird_recognizer prep cache --limit 24 && bird_recognizer prep cache --limit 24 --verify
+bird_recognizer train mfcc --smoke && bird_recognizer train cnn --smoke
 bird_recognizer train crnn --pool attention --smoke
 bird_recognizer eval --run RUN --split test
 bird_recognizer demo --run RUN
@@ -61,6 +62,9 @@ używaj równoważnej formy `python -m bird_recognizer.cli <komenda>`.
 - Metryka główna to macro-F1 na poziomie nagrania; zawsze podawaj `n` i udział odrzuconych okien.
 - Rozkład klas jest niezbalansowany: nie raportuj samej accuracy.
 - GPU bywa niedeterministyczne mimo seeda — raportuj urządzenie i nie obiecuj powtarzalności.
+- **Determinizm zaczyna się od seeda:** `set_seed(config.seed)` musi być **przed** utworzeniem
+  modelu (torch startuje z losowym stanem procesu). Ten błąd dał dwa różne wyniki z tym samym
+  configiem — patrz dziennik, odstępstwo 24.
 - `data/cache` jest w pełni odtwarzalny z `data/raw`; usunięcie cache nie traci danych.
 - Windows: `DataLoader` z `num_workers>0` wymaga `if __name__ == "__main__"` w skryptach
   startowych; przy problemach zacznij od `num_workers=0`.
