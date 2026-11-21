@@ -11,6 +11,9 @@ który patrzy na spektrogram okna bez rekurencji?**
 > **Nowy w projekcie?** Zacznij od [`docs/przewodnik.md`](docs/przewodnik.md) — prosty słownik
 > terminów i wyjaśnienie, jak wszystko się łączy, bez żargonu.
 
+> **Aplikacja (nagraj/wgraj + próg „nie wiem")** jest opisana w osobnym dokumencie:
+> [`project info/APP_SPEC.md`](project%20info/APP_SPEC.md) (wariant A+B, etapy APP-1…APP-5).
+
 ## 1. Cel i pytanie badawcze
 
 Model dostaje 3-sekundowe okno nagrania i zwraca gatunek. Porównujemy cztery rodziny modeli

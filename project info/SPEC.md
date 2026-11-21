@@ -915,7 +915,7 @@ git ls-files | grep -E '\.(mp3|wav|flac|ogg)$'   # Windows: git ls-files | Selec
 
 ### 15.14 Etap 9 (opcjonalny) — rozszerzenia
 
-Tylko po zamknięciu etapu 8 i po decyzji człowieka (D12). Warianty: embeddingi BirdNET/Perch/PANNs + głowica czasowa, klasyfikacja wieloetykietowa, lokalizacja w czasie, więcej gatunków. **Bramka:** run z rozszerzeniem trafia do tej samej tabeli co reszta, ze źródłem wag i licencją; żadna reguła z §15.3 nie przestaje obowiązywać.
+Tylko po zamknięciu etapu 8 i po decyzji człowieka (D12). Warianty: embeddingi BirdNET/Perch/PANNs + głowica czasowa, klasyfikacja wieloetykietowa, lokalizacja w czasie, więcej gatunków. Aplikacja „nagraj albo wgraj” (mikrofon/plik + próg „nie wiem”) ma własną specyfikację `project info/APP_SPEC.md` (wariant A+B, etapy APP-1…APP-5). **Bramka:** run z rozszerzeniem trafia do tej samej tabeli co reszta, ze źródłem wag i licencją; żadna reguła z §15.3 nie przestaje obowiązywać.
 
 ### 15.15 Definition of Done (całość)
 
