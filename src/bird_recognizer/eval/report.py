@@ -7,6 +7,8 @@ tables and numbers, not research conclusions.
 
 from __future__ import annotations
 
+import csv
+import json
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,11 @@ from ..errors import DataError
 GENERATED_NOTE = (
     "> **Plik generowany przez `bird_recognizer report` — nie edytuj tabeli ręcznie.** "
     "Sekcje 1–4 pochodzą z `runs/index.csv`; sekcję „Wnioski” uzupełnia człowiek."
+)
+
+MISSING_EVAL_HINT = (
+    "_(brak eval_test/per_class.csv — uruchom "
+    "`bird_recognizer eval --run <id> --split test`)_"
 )
 
 COLUMNS: tuple[tuple[str, str], ...] = (
@@ -98,6 +105,8 @@ def render_report(
     rows: Sequence[dict[str, str]],
     *,
     reference_id: str | None = None,
+    runs_dir: Path | None = None,
+    species_pairs: dict[str, tuple[str, str]] | None = None,
     title: str = "Eksperymenty — bird_recognizer",
 ) -> str:
     """Full Markdown document: generated table, run list, placeholders for later stages."""
@@ -120,13 +129,95 @@ def render_report(
             "Legenda: `Δ test vs ref` to różnica test macro-F1 (na poziomie nagrania) względem "
             f"runu referencyjnego `{reference_row['run_id']}`. `n/d` = pole niedostępne "
             "(np. top-3 przy mniej niż 3 klasach). Wiersze z `smoke` w uwagach są przebiegami "
-            "technicznymi na 2 nagraniach na gatunek — nie są wynikami badania.",
+            "technicznymi na 2 nagraniach na gatunek — nie są wynikami badania; dotyczy to także "
+            "sekcji 3–4, bo korzystają z tych samych runów (`eval_test`/`eval_own`).",
             "## 2. Runy i seedy\n\n" + run_list,
-            "## 3. Pary mylące\n\n_(etap 7: tabela par z `per_class.csv`; tutaj tylko miejsce)_",
-            "## 4. Zbiór własny\n\n_(etap 7: test vs own + `own_delta`)_",
+            "## 3. Pary mylące\n\n"
+            + _pairs_section(rows, runs_dir, species_pairs or {}),
+            "## 4. Zbiór własny\n\n" + _own_section(rows, runs_dir),
             "## 5. Wnioski\n\n_(uzupełnia człowiek — SPEC §11.3; agent nie wymyśla wniosków)_",
         ]
     ) + "\n"
+
+
+def _read_csv(path: Path) -> list[dict[str, str]] | None:
+    if not path.is_file():
+        return None
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _read_json(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+
+def _pairs_section(
+    rows: Sequence[dict[str, str]],
+    runs_dir: Path | None,
+    species_pairs: dict[str, tuple[str, str]],
+) -> str:
+    """F1 of both species of every D1 pair, from ``eval_test/per_class.csv``."""
+    if runs_dir is None or not species_pairs:
+        return MISSING_EVAL_HINT
+    run_f1: dict[str, dict[str, float]] = {}
+    for row in rows:
+        per_class = _read_csv(Path(runs_dir) / row["run_id"] / "eval_test" / "per_class.csv")
+        if not per_class:
+            continue
+        run_f1[row["run_id"]] = {
+            item["species"]: float(item["f1"]) for item in per_class if item.get("f1")
+        }
+    if not run_f1:
+        return MISSING_EVAL_HINT
+    used_runs = [row["run_id"] for row in rows if row["run_id"] in run_f1]
+    header = "| para | gatunek | " + " | ".join(used_runs) + " |"
+    divider = "|---|---|" + "|".join("---" for _ in used_runs) + "|"
+    lines = [header, divider]
+    for pair, pair_species in species_pairs.items():
+        for species in pair_species:
+            cells = [
+                _fmt(run_f1[run].get(species), 3) if species in run_f1[run] else "n/d"
+                for run in used_runs
+            ]
+            lines.append(f"| {pair} | {species} | " + " | ".join(cells) + " |")
+    missing = [row["run_id"] for row in rows if row["run_id"] not in run_f1]
+    note = (
+        f"\n\nBrak `eval_test` dla: {', '.join(f'`{item}`' for item in missing)}."
+        if missing
+        else ""
+    )
+    return "\n".join(lines) + note
+
+
+def _own_section(rows: Sequence[dict[str, str]], runs_dir: Path | None) -> str:
+    """Test vs own set, with ``own_delta`` (FR-10); own data is a human task."""
+    if runs_dir is None:
+        return "_(brak nagrań własnych — `data/own/<gatunek>/`; SPEC §16)_"
+    lines = ["| run | test macro-F1 | own macro-F1 | own_delta |", "|---|---|---|---|"]
+    found = False
+    for row in rows:
+        test_metrics = _read_json(Path(runs_dir) / row["run_id"] / "eval_test" / "metrics.json")
+        own_metrics = _read_json(Path(runs_dir) / row["run_id"] / "eval_own" / "metrics.json")
+        if not test_metrics or not own_metrics:
+            continue
+        found = True
+        test_f1 = test_metrics["recording"]["macro_f1"]
+        own_f1 = own_metrics["recording"]["macro_f1"]
+        lines.append(
+            f"| {row['run_id']} | {_fmt(test_f1, 3)} | {_fmt(own_f1, 3)} | "
+            f"{_delta(own_f1, test_f1)} |"
+        )
+    if not found:
+        return (
+            "_(brak nagrań własnych w `data/own/<gatunek>/` albo brak `eval_own` — "
+            "to zadanie człowieka, SPEC §16; nic nie podstawiamy w zamian)_"
+        )
+    return "\n".join(lines)
 
 
 def write_report(
@@ -134,11 +225,21 @@ def write_report(
     rows: Sequence[dict[str, str]],
     *,
     reference_id: str | None = None,
+    runs_dir: Path | None = None,
+    species_pairs: dict[str, tuple[str, str]] | None = None,
 ) -> Path:
     """Render the report and write it atomically."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.parent / f".{target.name}.tmp"
-    tmp.write_text(render_report(rows, reference_id=reference_id), encoding="utf-8")
+    tmp.write_text(
+        render_report(
+            rows,
+            reference_id=reference_id,
+            runs_dir=runs_dir,
+            species_pairs=species_pairs,
+        ),
+        encoding="utf-8",
+    )
     tmp.replace(target)
     return target

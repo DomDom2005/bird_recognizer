@@ -21,6 +21,8 @@
 | 2026-11-21 | 6 | `ablation.py` (5 grup, jedna dźwignia na grupę, `runs/ablation_<grupa>.json`), `eval/report.py` (tabela z `index.csv`, sekcje etapu 7 jako placeholdery), CLI `ablate`/`report`, refaktor `run_neural` (wspólny dla `train` i `ablate`), cache okien 5 s/10 s na twardych linkach, instalacja `torch 2.15.0+cu132` | bramka etapu 6: `ruff check .` czysty, **226 testów**, `ablate --group rnn --smoke` → 3/3 runy, `report` → `docs/experiments.md` z 3 runów, test „jedna różnica w configu” zielony dla 5 grup | trafne po naprawie urządzenia modelu (odstępstwa 35–36) |
 | 2026-11-21 | 6 | pomiar GPU: CRNN `--smoke` 1 epoka 1,6 s (cuda) vs 12 s (cpu); testy CLI wymuszają `--device cpu`, żeby nie zależeć od GPU; cache 5 s i 10 s budowany w tle pod grupę `window` | `train crnn --smoke` → `device=cuda`; wiersze `docs/experiments.md` mają `smoke` w uwagach; pełne runy macierzy dochodzą po etapie 6 (dziennik niżej) | trafne |
 | 2026-11-21 | 6 | **pomiar pełnego epoch** CNN na całym train (95 898 okien, GPU): 757 s przy 38% wykorzystania GPU → wąskie gardło to `WindowDataset` czytający cały `mel.npy` (~4 MB) dla każdego okna przy tasowanym batchu | profil po zmianie: `np.load(mmap_mode="r")` + konwersja jednego okna → **129,7 s/epoch** (5,8× szybciej), identyczne metryki (val macro-F1 0,534, test 0,506); cache okien 5 s/10 s zweryfikowany (2889/2881 nagrań, 0 problemów) | trafne; poprawka w osobnym commicie `perf(data)` |
+| 2026-11-21 | 7 | `eval/metrics.py` (+balanced accuracy, per-class P/R/F1, pary), `eval/aggregate.py` (vote, coverage), `eval/error_analysis.py` (metadane, MD+CSV), `eval/evaluate.py` (ładowanie runu z własnego configu), CLI `eval`/`aggregate`/`error-analysis`, sekcje 3–4 w `report` | bramka etapu 7: `ruff` czysty, **253 testy**, pokrycie `eval/` **96%**, `eval`/`aggregate`/`error-analysis` exit 0 na runie `20261120-231935-crnn-rnn-crnn-gru-s42`, ręczne macro-F1 25/36 zgodne z kodem | trafne po poprawce `balanced_accuracy` (sklearn nie przyjmuje `labels`; liczone jako macro recall) |
+| 2026-11-21 | 7 | uruchomienie na 3 runach `rnn` (smoke): 307 nagrań test, 11 020 okien; powstały `per_class.csv`, `confusion_matrix.png`, `predictions.csv`, `analysis/errors.md` i CSV; `docs/experiments.md` zyskało tabelę 4 par mylących (np. pierwiosnek F1 0,11–0,18, piecuszek 0,11–0,14) | `report` regeneruje sekcje 3–4; sekcja 4 jawnie „brak nagrań własnych” (zadanie człowieka) | trafne; liczby z runów smoke — nie są wynikami badania |
 
 ## Odstępstwa od SPEC
 
@@ -202,6 +204,24 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     `np.load(mmap_mode="r")` i konwersja tylko wybranego okna do float32. Ten sam epoch:
     **129,7 s** (5,8× szybciej), a metryki **identyczne** (val macro-F1 0,534, test 0,506) —
     dowód, że zmiana jest wyłącznie wydajnościowa. Dodany test dtype i zgodności z pełnym odczytem.
+42. **`eval` używa geometrii z runu, nie z bieżącego `configs/`.** Run 5 s/10 s byłby inaczej
+    liczony na złym cache. `eval/evaluate.py` odtwarza `audio` i `spectrogram` z `config.yaml`
+    runu, a `paths.data_dir` bierze z `metrics.json` (`data` vs `data/window5`). Dzięki temu
+    ta sama komenda obsługuje wszystkie grupy ablacji.
+43. **`balanced_accuracy_score` nie przyjmuje `labels`.** Pierwsza wersja przekazywała
+    `labels=` i kończyła się `TypeError` w 4 testach. Poprawka: balanced accuracy = macro recall
+    z `recall_score(..., labels=..., average="macro", zero_division=0)`. Klasy nieobecne
+    w podziale mają recall 0 i **nie znikają** z metryki — to świadome.
+44. **Wyniki `eval` nie nadpisują `metrics.json` treningu.** Zapis idzie do
+    `runs/<run>/eval_<split>/` (metryki, per-class, macierz CSV+PNG, predykcje) oraz
+    `runs/<run>/analysis/`; `metrics.json` runu zostaje snapshotem treningu (SPEC FR-9).
+45. **Zbiór własny to `data/own/<gatunek>/`.** Brak danych → `eval --split own` kończy się
+    kodem 3, `report` jawnie pisze „brak nagrań własnych”, a nic nie jest podstawiane.
+    To zadanie człowieka z §16; syntetyk byłby nieuczciwy.
+46. **`url` w analizie błędów generowany z `id`.** Katalog nie przechowuje pola `url`
+    (jest `id`), więc link to `https://xeno-canto.org/<id>`; reszta metadanych (`q`, `type`,
+    `also`, `rmk`, `rec`) pochodzi z `catalog.jsonl`, a liczba okien i udział odrzuconych
+    z `meta.json` cache.
 
 ## Wznowienie po przerwie (2026-11-18)
 

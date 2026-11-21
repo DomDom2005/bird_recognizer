@@ -1,6 +1,6 @@
 # SPEC.md — bird_recognizer
 
-> Wersja 1.5 · 2026-11-21 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
+> Wersja 1.6 · 2026-11-21 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
 > Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium: `https://github.com/DomDom2005/bird_recognizer` — **`TODO(verify)`**: potwierdzić nazwę repo i branch (`main`) u człowieka, zanim wklei się to do README.
 
 ---
@@ -569,7 +569,7 @@ Dodatkowo: `docs/experiments.md` (generowany + wnioski), `docs/manual-checklist.
 | 4 | Baseline: MFCC+SVM i mały CNN | L | 3 | — | `[x]` 2026-11-20 |
 | 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[x]` 2026-11-20 |
 | 6 | Eksperymenty i ablacje | L | 5 | — | `[x]` 2026-11-21 |
-| 7 | Ewaluacja i analiza błędów | M | 6 | własne nagrania z telefonu | `[ ]` |
+| 7 | Ewaluacja i analiza błędów | M | 6 | własne nagrania z telefonu | `[x]` 2026-11-21 |
 | 8 | Demo, raport i domknięcie | M | 7 | wnioski w `experiments.md` | `[ ]` |
 | 9 | Rozszerzenia (opcjonalny) | ? | 8 | decyzja D12 | `[-]` |
 
@@ -848,11 +848,11 @@ macierzy są dokładane po etapie 6 i opisane w dzienniku.
 **Tworzy/zmienia:** `eval/{metrics,aggregate,error_analysis}.py`, `cli.py` (`eval`, `aggregate`, `error-analysis`), `tests/test_{metrics,aggregate,error_analysis}.py`.
 **Zadania**
 
-- [ ] `metrics.py`: macro-F1, top-1/top-3, balanced accuracy, per-class P/R/F1, macierz pomyłek (`csv` + `png`), zawsze z `n`.
-- [ ] `aggregate.py`: `mean` (główna) i `vote`; tabela „coverage vs accuracy”.
-- [ ] `eval --split own`: tabela `own` vs `test` z `own_delta`.
-- [ ] `error_analysis.py`: 10 najczęstszych par, per-gatunek recall, metadane (`also`, `rmk`, `q`, liczba okien, udział odrzuconych), eksport MD + CSV.
-- [ ] sekcja par mylących w `docs/experiments.md` (F1 per klasa dla 4 par z D1).
+- [x] `metrics.py`: macro-F1, top-1/top-3, balanced accuracy, per-class P/R/F1, macierz pomyłek (`csv` + `png`), zawsze z `n`.
+- [x] `aggregate.py`: `mean` (główna) i `vote`; tabela „coverage vs accuracy”.
+- [x] `eval --split own`: tabela `own` vs `test` z `own_delta`.
+- [x] `error_analysis.py`: 10 najczęstszych par, per-gatunek recall, metadane (`also`, `rmk`, `q`, liczba okien, udział odrzuconych), eksport MD + CSV.
+- [x] sekcja par mylących w `docs/experiments.md` (F1 per klasa dla 4 par z D1).
 
 **Bramka**
 
@@ -866,6 +866,19 @@ bird_recognizer error-analysis --run <BEST>
 - Pokrycie `eval/` ≥ 80%; macro-F1 policzony ręcznie na znanej macierzy pomyłek zgadza się z kodem.
 - `metrics.json` zawiera wszystkie pola z §11.2 i `n`.
 - Analiza błędów tworzy CSV i MD; wskazuje pary mylące z D1.
+
+**Stan po etapie 7 (2026-11-21):** `eval` ładuje run **z jego własnego** `config.yaml`
+i `metrics.json` (geometria okna, model, opcje) i zapisuje `runs/<run>/eval_<split>/`:
+`metrics.json`, `per_class.csv`, `confusion_matrix.csv`, `confusion_matrix.png`, `predictions.csv`.
+`aggregate` dopisuje `aggregation.csv` (mean vs vote) i `coverage.csv`; `error-analysis` tworzy
+`runs/<run>/analysis/{errors.md, pairs.csv, per_species.csv, worst_recordings.csv}` z metadanymi
+z katalogu (`q`, `type`, `also`, `rmk`, `rec`, link XC) i cache (okna, udział odrzuconych).
+Sekcje 3–4 `docs/experiments.md` czytają te pliki; brak `eval_test`/`eval_own` jest jawnie
+oznaczony, nie pominięty. **Zbiór własny** to `data/own/<gatunek>/` (`*.wav|mp3|flac|ogg`) —
+zadanie człowieka; brak danych → `eval --split own` kończy się kodem 3, a raport pisze
+„brak nagrań własnych”, bez żadnego syntetyku. Bramka: **253 testy**, pokrycie `eval/` **96%**,
+`eval`/`aggregate`/`error-analysis` exit 0 na runie `20261120-231935-crnn-rnn-crnn-gru-s42`
+(smoke; pełny run po zamknięciu macierzy etapu 6), ręczne macro-F1 = 25/36 zgodne z kodem.
 
 **Commit:** `feat(eval): recording-level metrics, aggregation and error analysis` · **Dziennik:** które gatunki mylą się najbardziej i czy wygląda to na szum etykiet.
 **Stop, jeśli:** brak nagrań własnych → zrób wszystko poza sekcją `own`, oznacz ją jako brak danych i poproś człowieka; nie podstawiaj syntetyku bez napisu „DANE SYNTETYCZNE”.

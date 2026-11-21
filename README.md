@@ -4,9 +4,9 @@ Klasyfikacja gatunku ptaka z nagrania: mel-spektrogramy, CNN, transfer wiedzy i 
 Projekt badawczy (studia AI), pytanie: **ile daje modelowanie czasu w porównaniu z modelem,
 który patrzy na spektrogram okna bez rekurencji?**
 
-> **Status: etap 6 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, baseline, modele główne
-> oraz macierz ablacji i generator tabeli wyników są gotowe; pełne runy macierzy dochodzą po
-> etapie 6, ewaluacja i analiza błędów w etapie 7, demo i raport w etapie 8.
+> **Status: etap 7 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, modele, ablacje oraz
+> ewaluacja i analiza błędów są gotowe; pełne runy macierzy dochodzą po etapie 7, a demo,
+> raport końcowy i domknięcie to etap 8.
 
 ## 1. Cel i pytanie badawcze
 
@@ -99,6 +99,21 @@ Każdy run macierzy to osobny katalog w `runs/`; definicja grupy (run referencyj
 ląduje w `runs/ablation_<grupa>.json`. `report` generuje `docs/experiments.md` z `runs/index.csv`,
 a sekcję „Wnioski” uzupełnia człowiek.
 
+Ewaluacja i analiza błędów (etap 7):
+
+```bash
+bird_recognizer eval --run RUN --split test    # metryki okna i nagrania, macierz pomyłek
+bird_recognizer aggregate --run RUN --method vote   # mean vs vote + coverage
+bird_recognizer error-analysis --run RUN       # pary mylące, najgorsze nagrania
+bird_recognizer eval --run RUN --split own     # zbiór własny: data/own/<gatunek>/*.wav
+```
+
+`eval` zapisuje `runs/<run>/eval_<split>/` (`metrics.json`, `per_class.csv`,
+`confusion_matrix.csv`, `confusion_matrix.png`, `predictions.csv`), `aggregate` dopisuje
+`aggregation.csv` i `coverage.csv`, a `error-analysis` — `runs/<run>/analysis/errors.md` + CSV.
+Zbiór własny (`--split own`) czytamy z `data/own/<gatunek>/`; brak katalogu oznacza kod 3
+i jawne „brak nagrań własnych” w raporcie — nic nie jest podstawiane w zamian.
+
 Każdy przebieg zapisuje `runs/<run_id>/{config.yaml, env.txt, metrics.json, metrics.jsonl,
 best.pt | model.joblib}` i dopisuje wiersz do `runs/index.csv`.
 
@@ -106,7 +121,7 @@ Jeśli komenda `bird_recognizer` nie jest w PATH (tak jest na części instalacj
 gdzie `pip` instaluje skrypty do katalogu spoza PATH), użyj równoważnej formy
 `python -m bird_recognizer.cli …`.
 
-Kolejne kroki (etapy 7–8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
+Kolejny krok (etap 8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
 
 ## 5. Tryb bez internetu
 
@@ -119,25 +134,28 @@ Kolejne kroki (etapy 7–8) opisuje `project info/SPEC.md` §15: karta etapu = z
 
 ## 6. Wyniki
 
-Dla etapu 6: `docs/experiments.md` jest generowane z `runs/index.csv`, ale tabela pochodzi
-z przebiegów `--smoke` na realnym podzbiorze (2 nagrania/gatunek) — wiersze mają `smoke` w uwagach,
-więc **nie są wynikami badania**. Pełne runy macierzy (5 grup, GPU RTX 5070) są dokładane po etapie 6;
-każdy run zapisuje `config.yaml`, seed, urządzenie i `git_sha`. Wnioski badawcze dopisuje człowiek
-w sekcji 5 pliku.
+Dla etapu 7: `docs/experiments.md` jest generowane z `runs/index.csv` i wzbogacane o sekcję par
+mylących z `eval_test/per_class.csv` oraz o tabelę test vs zbiór własny (`eval_own`). Tabela
+pochodzi jednak z przebiegów `--smoke` (2 nagrania/gatunek) — wiersze mają `smoke` w uwagach,
+więc **nie są wynikami badania**. Pełne runy macierzy (5 grup, GPU RTX 5070, ~15 epok) są dokładane
+po etapie 7; każdy run zapisuje `config.yaml`, seed, urządzenie i `git_sha`. Wnioski badawcze
+dopisuje człowiek w sekcji 5 pliku. Zbiór własny (`data/own/<gatunek>/`) jest zadaniem człowieka —
+bez niego raport jawnie pokazuje brak danych.
 
 ## 7. Testy
 
 ```bash
 pytest                 # całość, offline (gniazda zablokowane)
 ruff check .
-pytest --cov=bird_recognizer.models --cov=bird_recognizer.train   # pokrycie etapu 4
+pytest --cov=bird_recognizer.eval --cov-report=term-missing   # bramka pokrycia etapu 7
 ```
 
-Stan: **226 testów**; pokrycie całości 91% (`models/` 83–100%, `train/` 93–100%, `ablation.py` 90%,
-`eval/report.py` 91%, `data/` 88–100%, `xc/` 90–94%). Zakres: konfiguracja, redakcja sekretów,
+Stan: **253 testy**; pokrycie całości ~91% (`eval/` 96%, `models/` 83–100%, `train/` 93–100%,
+`ablation.py` 90%, `data/` 88–100%, `xc/` 90–94%). Zakres: konfiguracja, redakcja sekretów,
 blokada sieci, klient API, katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache,
-modele (CNN, CRNN, transfer), augmentacje (basic i full), pętla treningu, metryki, runner, CLI,
-macierz ablacji (reguła jednej zmiany, JSON, twarde linki okien) i generator raportu.
+modele (CNN, CRNN, transfer), augmentacje (basic i full), pętla treningu, metryki (macro-F1,
+balanced accuracy, per-class, pary pomyłek), agregacja mean/vote z coverage, analiza błędów
+(MD + CSV), ewaluacja runu z jego configu, macierz ablacji i generator raportu.
 
 ## 8. Struktura repo
 
@@ -150,7 +168,7 @@ bird_recognizer/
 │   ├── data/              # splits, audio, windows, spectrogram, dataset (cache)
 │   ├── models/            # cnn, crnn, transfer, mfcc_baseline
 │   ├── train/             # augment (basic/full), loop, runner
-│   └── eval/              # metrics, report (tabela wyników, etap 7: error analysis)
+│   └── eval/              # metrics, aggregate (mean/vote+coverage), error_analysis, evaluate, report
 ├── scripts/               # probe_api.py, check_leakage.py
 ├── tests/                 # + fixtures/api, fixtures/synthetic_data, support.py (WAV-y)
 ├── docs/                  # api-notes, ai-journal, data-flow, manual-checklist

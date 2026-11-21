@@ -6,13 +6,16 @@ recording-level metrics are the headline numbers (SPEC §10.6).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
     f1_score,
+    precision_recall_fscore_support,
+    recall_score,
     top_k_accuracy_score,
 )
 
@@ -32,6 +35,24 @@ def macro_f1(
 
 def accuracy(y_true: Sequence[int], y_pred: Sequence[int]) -> float:
     return float(accuracy_score(y_true, y_pred))
+
+
+def balanced_accuracy(
+    y_true: Sequence[int],
+    y_pred: Sequence[int],
+    *,
+    labels: Sequence[int] | None = None,
+) -> float:
+    """Macro recall: every class counts equally, robust to class imbalance."""
+    return float(
+        recall_score(
+            y_true,
+            y_pred,
+            labels=list(labels) if labels else None,
+            average="macro",
+            zero_division=0,
+        )
+    )
 
 
 def top_k_accuracy(
@@ -84,6 +105,63 @@ def per_class_f1(
         zero_division=0,
     )
     return {int(label): float(score) for label, score in zip(labels, scores, strict=True)}
+
+
+def per_class_metrics(
+    y_true: Sequence[int],
+    y_pred: Sequence[int],
+    *,
+    labels: Sequence[int],
+    names: Mapping[int, str] | None = None,
+) -> list[dict[str, object]]:
+    """Precision, recall, F1 and support for every class (SPEC FR-10)."""
+    precision, recall, f1, support = precision_recall_fscore_support(
+        y_true,
+        y_pred,
+        labels=list(labels),
+        average=None,
+        zero_division=0,
+    )
+    rows: list[dict[str, object]] = []
+    for index, label in enumerate(labels):
+        rows.append(
+            {
+                "label": int(label),
+                "species": (names or {}).get(int(label), str(label)),
+                "precision": float(precision[index]),
+                "recall": float(recall[index]),
+                "f1": float(f1[index]),
+                "support": int(support[index]),
+            }
+        )
+    return rows
+
+
+def confusion_pairs(
+    y_true: Sequence[int],
+    y_pred: Sequence[int],
+    *,
+    names: Mapping[int, str] | None = None,
+    top: int = 10,
+) -> list[dict[str, object]]:
+    """Most frequent (truth -> prediction) mistakes; only real confusions count."""
+    counts = Counter(
+        (int(truth), int(prediction))
+        for truth, prediction in zip(y_true, y_pred, strict=True)
+        if int(truth) != int(prediction)
+    )
+    rows: list[dict[str, object]] = []
+    for (truth, predicted), count in counts.most_common(max(1, top)):
+        rows.append(
+            {
+                "truth": truth,
+                "predicted": predicted,
+                "truth_name": (names or {}).get(truth, str(truth)),
+                "predicted_name": (names or {}).get(predicted, str(predicted)),
+                "count": int(count),
+            }
+        )
+    return rows
 
 
 def aggregate_by_group(

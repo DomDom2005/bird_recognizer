@@ -25,6 +25,9 @@ from .data.dataset import (
 )
 from .data.splits import load_splits, make_and_save, splits_path
 from .errors import AppError, DataError, ModelError
+from .eval import error_analysis as error_analysis_module
+from .eval import evaluate as evaluate_module
+from .eval.aggregate import coverage_curve, vote_by_group
 from .eval.metrics import accuracy, aggregate_by_group, macro_f1, top_k_accuracy
 from .eval.report import select_rows, write_report
 from .logging_setup import configure_console, setup_logging
@@ -32,7 +35,7 @@ from .models.mfcc_baseline import MFCCBaseline, features_from_refs
 from .models_registry import build_model
 from .train.loop import set_seed, train_model
 from .train.runner import Run, base_index_row, load_index
-from .xc.catalog import build_catalog, catalog_path
+from .xc.catalog import build_catalog, catalog_path, load_catalog
 from .xc.client import XCClient
 from .xc.download import download_audio
 
@@ -175,6 +178,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("docs/experiments.md"),
         help="wyjściowy plik Markdown (domyślnie docs/experiments.md)",
     )
+
+    evaluate = sub.add_parser("eval", help="metryki runu na poziomie okna i nagrania")
+    evaluate.add_argument("--run", required=True, help="run_id albo ścieżka katalogu runu")
+    evaluate.add_argument("--split", choices=["val", "test", "own"], default="test")
+
+    aggregate = sub.add_parser("aggregate", help="agregacja mean vs vote + coverage")
+    aggregate.add_argument("--run", required=True)
+    aggregate.add_argument("--method", choices=["mean", "vote"], default="mean")
+    aggregate.add_argument("--split", choices=["val", "test"], default="test")
+
+    errors = sub.add_parser("error-analysis", help="pary mylące i najgorsze nagrania")
+    errors.add_argument("--run", required=True)
+    errors.add_argument("--split", choices=["val", "test"], default="test")
+    errors.add_argument("--top", type=int, default=10, help="ile par pomyłek pokazać")
 
     return parser
 
@@ -783,6 +800,19 @@ def _cmd_ablate(config: Config, args: argparse.Namespace) -> int:
     return 0 if finished else 3
 
 
+def _species_pairs(config: Config) -> dict[str, tuple[str, str]]:
+    """Pairs declared in ``configs/species.yaml`` (``pair`` field); used by the report."""
+    grouped: dict[str, list[str]] = {}
+    for species in config.species:
+        if species.pair:
+            grouped.setdefault(species.pair, []).append(species.pl)
+    return {
+        name: (names[0], names[1])
+        for name, names in grouped.items()
+        if len(names) >= 2
+    }
+
+
 def _cmd_report(config: Config, args: argparse.Namespace) -> int:
     """Generate the Markdown results table from ``runs/index.csv`` (FR-14)."""
     rows = load_index(config.paths.runs_dir)
@@ -791,7 +821,13 @@ def _cmd_report(config: Config, args: argparse.Namespace) -> int:
             f"brak wpisów w {config.paths.runs_dir / 'index.csv'} — najpierw wytrenuj model"
         )
     selected = select_rows(rows, args.runs)
-    path = write_report(args.out, selected, reference_id=selected[0]["run_id"])
+    path = write_report(
+        args.out,
+        selected,
+        reference_id=selected[0]["run_id"],
+        runs_dir=config.paths.runs_dir,
+        species_pairs=_species_pairs(config),
+    )
     print(f"Raport: {len(selected)} runów -> {path}")
     for row in selected:
         print(
@@ -799,6 +835,138 @@ def _cmd_report(config: Config, args: argparse.Namespace) -> int:
             f"{_fmt(_row_float(row, 'test_macro_f1'))}, "
             f"val macro-F1={_fmt(_row_float(row, 'val_macro_f1'))}"
         )
+    return 0
+
+
+def _cmd_eval(config: Config, args: argparse.Namespace) -> int:
+    """Window and recording metrics for a saved run (FR-10)."""
+    device = _resolve_device(args)
+    bundle = evaluate_module.load_run(config, args.run, device=device)
+    payload = evaluate_module.evaluate_split(bundle, args.split)
+    recording = payload["recording"]
+    vote = payload["vote"]
+    print(
+        f"Eval {bundle.run_id} / {args.split}: "
+        f"nagrania={payload['n_recordings']}, okna={payload['n_windows']}"
+    )
+    print(
+        f"  mean: macro-F1={recording['macro_f1']:.3f} "
+        f"accuracy={recording['accuracy']:.3f} "
+        f"balanced={recording['balanced_accuracy']:.3f} "
+        f"top3={_fmt(recording['top3'])}"
+    )
+    print(
+        f"  vote: macro-F1={vote['macro_f1']:.3f} accuracy={vote['accuracy']:.3f}"
+    )
+    print(f"  pliki: {bundle.directory / ('eval_' + args.split)}")
+    return 0
+
+
+def _cmd_aggregate(config: Config, args: argparse.Namespace) -> int:
+    """Mean vs vote aggregation and the coverage/accuracy table (FR-10, §10.6)."""
+    device = _resolve_device(args)
+    bundle = evaluate_module.load_run(config, args.run, device=device)
+    scores = evaluate_module.split_recording_scores(bundle, args.split)
+    labels = list(range(len(bundle.config.species)))
+    mean_predictions = scores.scores.argmax(axis=1)
+    vote_order, vote_predictions = vote_by_group(scores.window_scores, scores.window_groups)
+    truth_by_id = dict(zip(scores.order, scores.truth, strict=True))
+    vote_truth = [truth_by_id[recording] for recording in vote_order]
+    rows = [
+        {
+            "method": "mean",
+            "selected": args.method == "mean",
+            "n": int(len(scores.order)),
+            "macro_f1": round(float(macro_f1(scores.truth, mean_predictions, labels=labels)), 6),
+            "accuracy": round(float(accuracy(scores.truth, mean_predictions)), 6),
+        },
+        {
+            "method": "vote",
+            "selected": args.method == "vote",
+            "n": int(len(vote_truth)),
+            "macro_f1": round(float(macro_f1(vote_truth, vote_predictions, labels=labels)), 6),
+            "accuracy": round(float(accuracy(vote_truth, vote_predictions)), 6),
+        },
+    ]
+    coverage = coverage_curve(scores.truth, scores.scores)
+    out_dir = bundle.directory / f"eval_{args.split}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    _write_rows(
+        out_dir / "aggregation.csv", rows, ("method", "selected", "n", "macro_f1", "accuracy")
+    )
+    _write_rows(out_dir / "coverage.csv", coverage, ("threshold", "n", "coverage", "accuracy"))
+    print(f"Agregacja {bundle.run_id} / {args.split}: n={len(scores.order)}")
+    for row in rows:
+        marker = "*" if row["selected"] else " "
+        print(
+            f" {marker} {row['method']}: macro-F1={row['macro_f1']:.3f} "
+            f"accuracy={row['accuracy']:.3f}"
+        )
+    print("  coverage vs accuracy:")
+    for row in coverage:
+        print(
+            f"    próg={row['threshold']:.2f}: n={row['n']} "
+            f"coverage={row['coverage']:.2f} accuracy={_fmt(row['accuracy'])}"
+        )
+    return 0
+
+
+def _write_rows(path: Path, rows: list[dict[str, object]], columns: tuple[str, ...]) -> None:
+    import csv
+
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(columns), extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in columns})
+
+
+def _cmd_error_analysis(config: Config, args: argparse.Namespace) -> int:
+    """Confusing pairs, per-species recall and worst recordings (FR-12)."""
+    device = _resolve_device(args)
+    bundle = evaluate_module.load_run(config, args.run, device=device)
+    scores = evaluate_module.split_recording_scores(bundle, args.split)
+    names = evaluate_module.species_names(bundle.config)
+    catalog_file = catalog_path(bundle.data_dir)
+    catalog = (
+        {str(entry["id"]): entry for entry in load_catalog(catalog_file)}
+        if catalog_file.is_file()
+        else {}
+    )
+    predictions = [
+        error_analysis_module.RecordingPrediction(
+            recording_id=recording,
+            truth=int(scores.truth[index]),
+            predicted=int(scores.scores[index].argmax()),
+            confidence=float(scores.scores[index].max()),
+            p_true=float(scores.scores[index][scores.truth[index]]),
+        )
+        for index, recording in enumerate(scores.order)
+    ]
+    analysis = error_analysis_module.analyse(
+        predictions,
+        names=names,
+        catalog=catalog,
+        cache_root=bundle.data_dir / "cache",
+        labels=list(range(len(bundle.config.species))),
+        top=args.top,
+    )
+    paths = error_analysis_module.write_analysis(bundle.directory / "analysis", analysis)
+    print(
+        f"Analiza błędów: {bundle.run_id} / {args.split}, "
+        f"nagrania={analysis['n']}"
+    )
+    pairs = ", ".join(
+        f"{row['truth_name']}→{row['predicted_name']} ({row['count']})"
+        for row in analysis["pairs"][:5]
+    )
+    print(f"  pary: {pairs or 'brak pomyłek'}")
+    print(
+        f"  podejrzani o szum etykiet (also≠puste) w najgorszych: "
+        f"{analysis['label_noise_suspects']}/{len(analysis['worst'])}"
+    )
+    print(f"  pliki: {paths['markdown']}")
+    print(f"         {paths['pairs']}, {paths['per_species']}, {paths['worst']}")
     return 0
 
 
@@ -824,6 +992,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_ablate(config, args)
         if args.command == "report":
             return _cmd_report(config, args)
+        if args.command == "eval":
+            return _cmd_eval(config, args)
+        if args.command == "aggregate":
+            return _cmd_aggregate(config, args)
+        if args.command == "error-analysis":
+            return _cmd_error_analysis(config, args)
         if args.command == "train":
             if args.train_command == "mfcc":
                 return _cmd_train_mfcc(config, args)

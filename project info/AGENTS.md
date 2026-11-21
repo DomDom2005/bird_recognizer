@@ -26,6 +26,9 @@ bird_recognizer train transfer --arch resnet18 --smoke            # wagi ImageNe
 bird_recognizer ablate --group rnn --smoke
 bird_recognizer report --runs RUN1 RUN2 RUN3 --out docs/experiments.md
 bird_recognizer eval --run RUN --split test
+bird_recognizer aggregate --run RUN --method vote
+bird_recognizer error-analysis --run RUN
+bird_recognizer eval --run RUN --split own     # data/own/<gatunek>/* (zadanie człowieka)
 bird_recognizer demo --run RUN
 ```
 
@@ -85,6 +88,13 @@ używaj równoważnej formy `python -m bird_recognizer.cli <komenda>`.
 - **GPU:** `requirements.txt` pinuje `torch==2.15.0+cu132`; urządzenie wybiera się automatycznie,
   `--device cpu` wymusza CPU (testy CLI używają CPU, żeby były szybkie i powtarzalne). Wyniki
   GPU mogą różnić się od CPU mimo seeda — raportuj `device`, nie obiecuj powtarzalności.
+- **`eval` czyta geometrię z `config.yaml` runu**, nie z bieżącego `configs/`: run 5 s/10 s
+  musi być liczony na cache `data/windowN`. Wyniki idą do `runs/<run>/eval_<split>/` i
+  `runs/<run>/analysis/`, nie nadpisują `metrics.json` treningu.
+- **Zbiór własny:** `data/own/<gatunek>/` (`*.wav|mp3|flac|ogg`). Brak danych → kod 3 i jawne
+  „brak nagrań własnych” w raporcie; nie podstawiaj syntetyku ani cudzych nagrań.
+- `balanced_accuracy` = macro recall po **wszystkich** klasach; klasa nieobecna w podziale ma
+  recall 0 (nie znika z metryki). Pary mylące liczone tylko z realnych pomyłek (prawda ≠ predykcja).
 - `data/cache` jest w pełni odtwarzalny z `data/raw`; usunięcie cache nie traci danych.
 - Windows: `DataLoader` z `num_workers>0` wymaga `if __name__ == "__main__"` w skryptach
   startowych; przy problemach zacznij od `num_workers=0`.
