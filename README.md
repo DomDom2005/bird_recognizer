@@ -206,7 +206,11 @@ Pełne drzewo: `project info/SPEC.md` §5. Dane (`data/`) i wyniki (`runs/`) są
 - Bramka ciszy (`abs_floor` ≈ −60 dBFS RMS) odrzuca bardzo ciche nagrania w całości
   (`empty_after_gating`); na pełnym zbiorze dotyczyło to 19 nagrań, a 1 nie dało się zdekodować
   (razem 20/2917 bez cache; 0 w zbiorze testowym).
-- `TODO(verify)` z `project info/SPEC.md` §4.3 są otwarte do czasu uruchomienia `probe_api.py --live`.
+- Wszystkie punkty SPEC §4.3 zostały sprawdzone przez `probe_api.py --live` (wyniki:
+  `docs/api-notes.md`); otwarte pozostaje tylko `ODŁOŻONE (D12)` — dostępność i licencje wag
+  BirdNET / Perch / PANNs, potrzebne wyłącznie przy rozszerzeniu D12.
+- Repozytorium docelowe `https://github.com/DomDom2005/bird_recognizer` **nie jest jeszcze
+  utworzone na GitHubie** (potwierdzone 2026-11-21); branch docelowy `main`.
 
 ## 10. Bezpieczeństwo i licencje
 

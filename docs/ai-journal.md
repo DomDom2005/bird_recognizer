@@ -23,6 +23,7 @@
 | 2026-11-21 | 6 | **pomiar pełnego epoch** CNN na całym train (95 898 okien, GPU): 757 s przy 38% wykorzystania GPU → wąskie gardło to `WindowDataset` czytający cały `mel.npy` (~4 MB) dla każdego okna przy tasowanym batchu | profil po zmianie: `np.load(mmap_mode="r")` + konwersja jednego okna → **129,7 s/epoch** (5,8× szybciej), identyczne metryki (val macro-F1 0,534, test 0,506); cache okien 5 s/10 s zweryfikowany (2889/2881 nagrań, 0 problemów) | trafne; poprawka w osobnym commicie `perf(data)` |
 | 2026-11-21 | 7 | `eval/metrics.py` (+balanced accuracy, per-class P/R/F1, pary), `eval/aggregate.py` (vote, coverage), `eval/error_analysis.py` (metadane, MD+CSV), `eval/evaluate.py` (ładowanie runu z własnego configu), CLI `eval`/`aggregate`/`error-analysis`, sekcje 3–4 w `report` | bramka etapu 7: `ruff` czysty, **253 testy**, pokrycie `eval/` **96%**, `eval`/`aggregate`/`error-analysis` exit 0 na runie `20261120-231935-crnn-rnn-crnn-gru-s42`, ręczne macro-F1 25/36 zgodne z kodem | trafne po poprawce `balanced_accuracy` (sklearn nie przyjmuje `labels`; liczone jako macro recall) |
 | 2026-11-21 | 7 | uruchomienie na 3 runach `rnn` (smoke): 307 nagrań test, 11 020 okien; powstały `per_class.csv`, `confusion_matrix.png`, `predictions.csv`, `analysis/errors.md` i CSV; `docs/experiments.md` zyskało tabelę 4 par mylących (np. pierwiosnek F1 0,11–0,18, piecuszek 0,11–0,14) | `report` regeneruje sekcje 3–4; sekcja 4 jawnie „brak nagrań własnych” (zadanie człowieka) | trafne; liczby z runów smoke — nie są wynikami badania |
+| 2026-11-21 | — | tożsamość git: autor commitów był `DomD9m` (globalny config), a właściciel chce konto GitHub `DomDom2005` i mail `dominik.karbowniczak2005@gmail.com`; ustawiono config lokalny i globalny, przepisano 14 commitów (`git filter-branch`, autor i committer), poprawiono odwołania do hashy w dzienniku i przemapowano `git_sha` w `runs/index.csv`/`env.txt` | `git log --format='%an <%ae>'` → tylko `DomDom2005 <dominik.karbowniczak2005@gmail.com>`; drzewa commitów bez zmian (te same treści), więc odtwarzalność runów zachowana; stare commity w `refs/original/` | trafne; mapa starych i nowych hashy w odstępstwie 47 |
 
 ## Odstępstwa od SPEC
 
@@ -222,6 +223,15 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     (jest `id`), więc link to `https://xeno-canto.org/<id>`; reszta metadanych (`q`, `type`,
     `also`, `rmk`, `rec`) pochodzi z `catalog.jsonl`, a liczba okien i udział odrzuconych
     z `meta.json` cache.
+47. **Przepisanie historii git (2026-11-21).** Autorem commitów był `DomD9m` z globalnego
+    configu (agent nie ustawia tożsamości sam). Właściciel potwierdził konto GitHub
+    `DomDom2005` i mail `dominik.karbowniczak2005@gmail.com`: ustawiono config **lokalny
+    i globalny**, a 14 commitów przepisano `git filter-branch` (autor i committer).
+    Ponieważ zmieniają się hashe, przemapowano `git_sha` w `runs/index.csv` i `runs/*/env.txt`
+    na nowe commity (drzewa są identyczne, więc wyniki pozostają odtwarzalne) i poprawiono
+    odwołania w tym dzienniku. Stare commity zostały w `refs/original/`; repo nie ma remote'a,
+    więc nie było force-pushu. Repozytorium docelowe `github.com/DomDom2005/bird_recognizer`
+    jest potwierdzone, ale **jeszcze nie utworzone** na GitHubie (TODO w SPEC rozwiązane).
 
 ## Wznowienie po przerwie (2026-11-18)
 

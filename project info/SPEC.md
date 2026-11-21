@@ -1,7 +1,7 @@
 # SPEC.md — bird_recognizer
 
 > Wersja 1.6 · 2026-11-21 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
-> Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium: `https://github.com/DomDom2005/bird_recognizer` — **`TODO(verify)`**: potwierdzić nazwę repo i branch (`main`) u człowieka, zanim wklei się to do README.
+> Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium docelowe: `https://github.com/DomDom2005/bird_recognizer` — potwierdzone przez właściciela 2026-11-21; **repozytorium nie zostało jeszcze utworzone na GitHubie**, docelowy branch to `main`.
 
 ---
 
@@ -115,7 +115,7 @@ Agent przyjmuje wartości domyślne, dopóki właściciel ich nie zmieni. Każda
 | 4 | Czy `q:">C"` zwraca A i B | działa; dla wróbla 119 nagrań (vs. brak taga `q` — porównanie w `docs/api-notes.md`) | `ZWERYFIKOWANE` |
 | 5 | Dostępność gatunków z D1 | 81–606 nagrań na gatunek; minimum to szczygieł (81), wszystkie > 50 → D1 wykonalne bez luzowania filtra | `ZWERYFIKOWANE` |
 | 6 | `page` poza `1..numPages` | HTTP 400 `client_error` (nie pusta lista) — traktuj jako błąd parametru, nie koniec danych | `ZWERYFIKOWANE` |
-| 7 | Dostępność i licencja wag BirdNET / Perch / PANNs | nie sprawdzane — potrzebne tylko, jeśli D12 wejdzie w grę | `TODO(verify)` |
+| 7 | Dostępność i licencja wag BirdNET / Perch / PANNs | nie sprawdzane — potrzebne tylko, jeśli D12 wejdzie w grę | `ODŁOŻONE (D12)` |
 
 Rozbieżność wykryta przy weryfikacji: tag `status:identified` z dokumentacji jest **odrzucany przez
 API** (HTTP 400) — patrz §4.1 i `docs/api-notes.md` §3.1. Tag domyślnie wyłączony; skutek: brak
@@ -283,7 +283,7 @@ Katalogi poza repo (gitignore): `data/` (`raw/`, `cache/`, `own/`, `catalog.json
 |`group`|str|`grp`|
 |`rec`|str|nagrywający (klucz grupowania w podziale)|
 |`cnt`|str|kraj|
-|`loc`|str|`TODO(verify)`: może być zredagowane dla gatunków chronionych|
+|`loc`|str|może być zredagowane dla gatunków chronionych; obsłużone przez `_meta.redacted_fields` (w katalogu 2026-11-21: 0 zredagowanych)|
 |`lat`,`lon`|float \| null|jak wyżej (mogą być zredagowane)|
 |`date`,`time`,`uploaded`|str|YYYY-MM-DD / HH:MM / YYYY-MM-DD|
 |`length`|str|surowy łańcuch z API (`"4:08"`), parsowany defensywnie|
