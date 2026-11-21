@@ -8,6 +8,9 @@ który patrzy na spektrogram okna bez rekurencji?**
 > ewaluacja i analiza błędów są gotowe; pełne runy macierzy dochodzą po etapie 7, a demo,
 > raport końcowy i domknięcie to etap 8.
 
+> **Nowy w projekcie?** Zacznij od [`docs/przewodnik.md`](docs/przewodnik.md) — prosty słownik
+> terminów i wyjaśnienie, jak wszystko się łączy, bez żargonu.
+
 ## 1. Cel i pytanie badawcze
 
 Model dostaje 3-sekundowe okno nagrania i zwraca gatunek. Porównujemy cztery rodziny modeli
