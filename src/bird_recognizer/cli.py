@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -984,7 +985,9 @@ def _cmd_demo(config: Config, args: argparse.Namespace) -> int:
     """Gradio demo; ``--smoke`` checks the path without starting a server (FR-13)."""
     from . import demo as demo_module
 
-    device = _resolve_device(args)
+    # Demo is a CPU application by design (SPEC FR-13); forcing CPU also avoids the
+    # CUDA 13.2 cuBLASLt stack overflow in the Gradio server threads (journal 53).
+    device = torch.device(args.device) if args.device else torch.device("cpu")
     bundle = evaluate_module.load_run(config, args.run, device=device)
     if args.smoke:
         return demo_module.smoke_check(bundle)
@@ -992,6 +995,34 @@ def _cmd_demo(config: Config, args: argparse.Namespace) -> int:
     print(f"  otwieram http://127.0.0.1:{args.port} (Ctrl+C kończy)")
     demo_module.launch(bundle, port=args.port)
     return 0
+
+
+STACK_SIZE_MB = 64
+
+
+def _call_with_big_stack(target: Callable[[], int]) -> int:
+    """Run one command with a larger thread stack (CUDA 13.2/cuBLASLt workaround).
+
+    cuBLASLt in the bundled CUDA 13.2 overflows the default 1 MB Windows stack for
+    some GEMM shapes: ResNet18 training died with ``0xC0000409`` while a worker thread
+    with a 64 MB stack runs the same computation (journal, odstępstwo 53).
+    """
+    outcome: dict[str, object] = {}
+
+    def runner() -> None:
+        try:
+            outcome["value"] = target()
+        except BaseException as exc:  # noqa: BLE001 - re-raised in the main thread
+            outcome["error"] = exc
+
+    threading.stack_size(STACK_SIZE_MB * 1024 * 1024)
+    thread = threading.Thread(target=runner, name="bird-cli", daemon=True)
+    thread.start()
+    thread.join()
+    error = outcome.get("error")
+    if error is not None:
+        raise error  # type: ignore[misc]
+    return int(outcome.get("value", 1))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1003,38 +1034,45 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = _apply_overrides(config, args)
         key = get_api_key()
         setup_logging("DEBUG" if args.verbose else "INFO", secrets=[key] if key else [])
-        if args.command == "data":
-            if args.data_command == "catalog":
-                return _cmd_catalog(config, args)
-            if args.data_command == "download":
-                return _cmd_download(config, args)
-            if args.data_command == "split":
-                return _cmd_split(config, args)
-        if args.command == "prep" and args.prep_command == "cache":
-            return _cmd_cache(config, args)
-        if args.command == "ablate":
-            return _cmd_ablate(config, args)
-        if args.command == "report":
-            return _cmd_report(config, args)
-        if args.command == "eval":
-            return _cmd_eval(config, args)
-        if args.command == "aggregate":
-            return _cmd_aggregate(config, args)
-        if args.command == "error-analysis":
-            return _cmd_error_analysis(config, args)
+
+        def dispatch() -> int:
+            if args.command == "data":
+                if args.data_command == "catalog":
+                    return _cmd_catalog(config, args)
+                if args.data_command == "download":
+                    return _cmd_download(config, args)
+                if args.data_command == "split":
+                    return _cmd_split(config, args)
+            if args.command == "prep" and args.prep_command == "cache":
+                return _cmd_cache(config, args)
+            if args.command == "ablate":
+                return _cmd_ablate(config, args)
+            if args.command == "report":
+                return _cmd_report(config, args)
+            if args.command == "eval":
+                return _cmd_eval(config, args)
+            if args.command == "aggregate":
+                return _cmd_aggregate(config, args)
+            if args.command == "error-analysis":
+                return _cmd_error_analysis(config, args)
+            if args.command == "demo":
+                return _cmd_demo(config, args)
+            if args.command == "train":
+                if args.train_command == "mfcc":
+                    return _cmd_train_mfcc(config, args)
+                if args.train_command == "cnn":
+                    return _cmd_train_cnn(config, args)
+                if args.train_command == "crnn":
+                    return _cmd_train_crnn(config, args)
+                if args.train_command == "transfer":
+                    return _cmd_train_transfer(config, args)
+            LOGGER.error("Nieznana komenda: %s", args.command)
+            return 1
+
+        # Gradio must own the main thread; every other command runs on a big stack.
         if args.command == "demo":
-            return _cmd_demo(config, args)
-        if args.command == "train":
-            if args.train_command == "mfcc":
-                return _cmd_train_mfcc(config, args)
-            if args.train_command == "cnn":
-                return _cmd_train_cnn(config, args)
-            if args.train_command == "crnn":
-                return _cmd_train_crnn(config, args)
-            if args.train_command == "transfer":
-                return _cmd_train_transfer(config, args)
-        LOGGER.error("Nieznana komenda: %s", args.command)
-        return 1
+            return dispatch()
+        return _call_with_big_stack(dispatch)
     except AppError as exc:
         print(f"BŁĄD: {exc}", file=sys.stderr)
         return exc.exit_code

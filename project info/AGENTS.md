@@ -88,6 +88,11 @@ używaj równoważnej formy `python -m bird_recognizer.cli <komenda>`.
 - **GPU:** `requirements.txt` pinuje `torch==2.15.0+cu132`; urządzenie wybiera się automatycznie,
   `--device cpu` wymusza CPU (testy CLI używają CPU, żeby były szybkie i powtarzalne). Wyniki
   GPU mogą różnić się od CPU mimo seeda — raportuj `device`, nie obiecuj powtarzalności.
+- **CUDA 13.2 + cuBLASLt a stos wątku (Windows):** ResNet18 na GPU potrafi paść z
+  `0xC0000409`/`0xc00000fd` (przepełnienie stosu w `cublasLt64_13.dll`) na domyślnym 1 MB stosie
+  wątku głównego. CLI uruchamia komendy w wątku z 64 MB stosu (`_call_with_big_stack`), a `demo`
+  działa na CPU. Jeśli dodajesz nowy kod wołający duże GEMM-y na CUDA, uruchamiaj go przez CLI
+  albo w takim wątku — nie „naprawiaj" tego zmianą modelu.
 - **`eval` czyta geometrię z `config.yaml` runu**, nie z bieżącego `configs/`: run 5 s/10 s
   musi być liczony na cache `data/windowN`. Wyniki idą do `runs/<run>/eval_<split>/` i
   `runs/<run>/analysis/`, nie nadpisują `metrics.json` treningu.

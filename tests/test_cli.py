@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from bird_recognizer.cli import main
+from bird_recognizer.cli import _call_with_big_stack, main
+from bird_recognizer.errors import DataError
 from support import make_catalog_with_audio
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -207,3 +208,18 @@ def test_transfer_scratch_and_pretrained_are_separate_runs(
         for path in _run_dirs(tmp_dir)
     }
     assert learning_rates == {0.001, 0.0003}
+
+
+# --------------------------------------------------------------------------- #
+# Big-stack dispatcher (CUDA 13.2 cuBLASLt workaround, journal 53)
+# --------------------------------------------------------------------------- #
+def test_call_with_big_stack_returns_handler_result() -> None:
+    assert _call_with_big_stack(lambda: 7) == 7
+
+
+def test_call_with_big_stack_reraises_handler_error() -> None:
+    def boom() -> int:
+        raise DataError("zły plik audio")
+
+    with pytest.raises(DataError, match="zły plik audio"):
+        _call_with_big_stack(boom)

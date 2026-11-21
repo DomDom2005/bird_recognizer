@@ -27,6 +27,7 @@
 | 2026-11-21 | 8 | `demo.py` + CLI `demo` (Gradio: plik → top-3 + spektrogram z oknami + karta modelu; `--smoke` bez serwera), README w 11 sekcjach z tabelą licencji i przykładową atrybucją, sekcja ograniczeń, `experiments.md` z pełnymi runami `rnn` | bramka etapu 8: `ruff` czysty, **257 testów**, `demo --run 20261121-180015-crnn-rnn-crnn-gru-s42 --smoke` exit 0 (top-3 na tonie syntetycznym), `git ls-files` bez audio i `.env` | trafne |
 | 2026-11-21 | 8 | pełne runy `rnn` na całym zbiorze (15 epok, early stopping, GPU): test macro-F1 CNN 0,704 / CRNN-GRU 0,707 / CRNN-LSTM 0,668; top-3 0,883/0,912/0,906; `eval` i `error-analysis` na najlepszym runie, pary mylące w `experiments.md` | 307 nagrań testowych, 11 020 okien; `error-analysis`: bogatka→modra (6), rudzik→modra (5); 3/10 najgorszych z `also` (podejrzenie szumu etykiet) | trafne; różnica CNN vs CRNN-GRU +0,003 = szum jednego seeda, więc **nie** ogłaszamy przewagi rekurencji |
 | 2026-11-21 | 8 | przegląd DoD (15.15) i domknięcie dziennika: 9/10 punktów zweryfikowanych; otwarte tylko „czysty venv" (brak w sandboxie) oraz zbiór własny i wnioski (człowiek) | README 11 sekcji, brak audio/sekretów w repo, `check_leakage` OK, `TODO(verify)` rozwiązane lub `ODŁOŻONE (D12)` | trafne; macierz ablacji domyka się po etapie 8 — patrz odstępstwa 48 i 52 |
+| 2026-11-22 | 8 | diagnoza awarii grupy `pretrained`: Podgląd zdarzeń wskazał `cublasLt64_13.dll`, `0xc00000fd` (przepełnienie stosu); repro na minimalnym ResNet18 potwierdziło, że ten sam krok w wątku z 64 MB stosu przechodzi; naprawa: CLI uruchamia komendy w wątku z dużym stosem (`_call_with_big_stack`), `demo` na CPU | `ruff` czysty, **257 testów** (w tym nowe testy helpera), grupa `pretrained` po naprawie ruszyła bez crashu (PID żyje, GPU aktywne) | trafne; przyczyna środowiskowa, nie zmiana modelu ani budżetu (odstępstwo 53) |
 
 ## Odstępstwa od SPEC
 
@@ -258,6 +259,16 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     zawiera już prawdziwe wyniki grupy `rnn` (nie smoke), a grupy `aug`, `pool`, `window`
     dojdą w follow-upie; `pretrained` wymaga powtórzenia (odstępstwo 48). Nie oznaczamy ich
     jako zbadanych, dopóki nie ma runów.
+53. **`pretrained` padł na przepełnieniu stosu w cuBLASLt (naprawione).** Objaw: `0xC0000409`
+    / w Podglądzie zdarzeń `0xc00000fd` (STATUS_STACK_OVERFLOW) w module `cublasLt64_13.dll`
+    przy pierwszym kroku ResNet18 na CUDA. Reprodukcja: minimalny skrypt z `build_transfer`
+    + forward batch 32 — crash; ten sam krok w wątku z 64 MB stosu — OK. Zawężenie: `eval`-owy
+    forward przechodził, więc to nie model, a domyślny 1 MB stos wątku głównego Windows
+    w połączeniu z CUDA 13.2. Naprawa: CLI uruchamia komendy (poza `demo`, które musi mieć
+    wątek główny) w wątku z `threading.stack_size(64 MB)`; `demo` działa na CPU z definicji
+    (FR-13), co dodatkowo omija problem. Po zmianie: `ruff` czysty, **257 testów**, grupa
+    `pretrained` ruszyła bez crashu. Wniosek: błąd środowiska, nie logiki; nie zmieniamy
+    budżetu ani konfiguracji eksperymentu.
 
 ## Wznowienie po przerwie (2026-11-18)
 
