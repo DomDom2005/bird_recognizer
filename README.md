@@ -4,9 +4,11 @@ Klasyfikacja gatunku ptaka z nagrania: mel-spektrogramy, CNN, transfer wiedzy i 
 Projekt badawczy (studia AI), pytanie: **ile daje modelowanie czasu w porównaniu z modelem,
 który patrzy na spektrogram okna bez rekurencji?**
 
-> **Status: etap 7 z 8** (patrz `project info/SPEC.md` §15). Dane, cache, modele, ablacje oraz
-> ewaluacja i analiza błędów są gotowe; pełne runy macierzy dochodzą po etapie 7, a demo,
-> raport końcowy i domknięcie to etap 8.
+> **Status: wersja minimalna ukończona — etapy 1–8** (patrz `project info/SPEC.md` §15).
+> Dane, cache, cztery rodziny modeli, macierz ablacji, ewaluacja, analiza błędów, generator tabeli
+> i demo są gotowe. Pełna macierz ablacji domyka się **po** etapie 8: grupa `rnn` ma już wyniki
+> na całym zbiorze, `pretrained` przerwała awaria CUDA (do powtórzenia), `aug`/`pool`/`window`
+> są w toku. Zbiór własny i wnioski w `docs/experiments.md` pozostają po stronie człowieka.
 
 > **Nowy w projekcie?** Zacznij od [`docs/przewodnik.md`](docs/przewodnik.md) — prosty słownik
 > terminów i wyjaśnienie, jak wszystko się łączy, bez żargonu.
@@ -136,7 +138,8 @@ Jeśli komenda `bird_recognizer` nie jest w PATH (tak jest na części instalacj
 gdzie `pip` instaluje skrypty do katalogu spoza PATH), użyj równoważnej formy
 `python -m bird_recognizer.cli …`.
 
-Kolejny krok (etap 8) opisuje `project info/SPEC.md` §15: karta etapu = zadania + bramka.
+Kolejny krok (etap 9 — opcjonalne rozszerzenia, m.in. aplikacja A+B) opisuje
+`project info/SPEC.md` §15.14 i `project info/APP_SPEC.md`.
 
 ## 5. Tryb bez internetu
 
@@ -149,13 +152,26 @@ Kolejny krok (etap 8) opisuje `project info/SPEC.md` §15: karta etapu = zadania
 
 ## 6. Wyniki
 
-Dla etapu 7: `docs/experiments.md` jest generowane z `runs/index.csv` i wzbogacane o sekcję par
-mylących z `eval_test/per_class.csv` oraz o tabelę test vs zbiór własny (`eval_own`). Tabela
-pochodzi jednak z przebiegów `--smoke` (2 nagrania/gatunek) — wiersze mają `smoke` w uwagach,
-więc **nie są wynikami badania**. Pełne runy macierzy (5 grup, GPU RTX 5070, ~15 epok) są dokładane
-po etapie 7; każdy run zapisuje `config.yaml`, seed, urządzenie i `git_sha`. Wnioski badawcze
-dopisuje człowiek w sekcji 5 pliku. Zbiór własny (`data/own/<gatunek>/`) jest zadaniem człowieka —
-bez niego raport jawnie pokazuje brak danych.
+Tabela w [`docs/experiments.md`](docs/experiments.md) jest generowana z `runs/index.csv`
+i wzbogacana o F1 per gatunek dla 4 par mylących (`eval_test/per_class.csv`) oraz o tabelę
+test vs zbiór własny (`eval_own`). Wnioski badawcze dopisuje człowiek w sekcji 5 pliku.
+
+**Grupa `rnn` na pełnym zbiorze** (307 nagrań testowych, 11 020 okien, seed 42, wspólny split,
+15 epok z early stopping; test macro-F1 na poziomie nagrania):
+
+| model | okno | aug | val macro-F1 | test macro-F1 | test top-3 |
+|---|---|---|---|---|---|
+| CNN (bez rekurencji) | 3 s | basic | 0,686 | **0,704** | 0,883 |
+| CRNN-GRU | 3 s | basic | 0,722 | **0,707** | 0,912 |
+| CRNN-LSTM | 3 s | basic | 0,707 | **0,668** | 0,906 |
+
+Różnica CNN vs CRNN-GRU to **+0,003** test macro-F1 — w granicach szumu jednego seeda, więc
+**nie ma podstaw, by ogłosić przewagę rekurencji**; to wstępne liczby, a wnioski i ewentualne
+3 seeda należą do człowieka. Pełna macierz (`pretrained`, `aug`, `pool`, `window`) domyka się po
+etapie 8; każdy run zapisuje `config.yaml`, seed, urządzenie i `git_sha`.
+
+Zbiór własny (`data/own/<gatunek>/`, sekcja `own`) to zadanie człowieka — bez niego raport jawnie
+pokazuje brak danych, a nie wyniki podstawione.
 
 ## 7. Testy
 
@@ -165,7 +181,7 @@ ruff check .
 pytest --cov=bird_recognizer.eval --cov-report=term-missing   # bramka pokrycia etapu 7
 ```
 
-Stan: **253 testy**; pokrycie całości ~91% (`eval/` 96%, `models/` 83–100%, `train/` 93–100%,
+Stan: **257 testów**; pokrycie całości ~91% (`eval/` 96%, `models/` 83–100%, `train/` 93–100%,
 `ablation.py` 90%, `data/` 88–100%, `xc/` 90–94%). Zakres: konfiguracja, redakcja sekretów,
 blokada sieci, klient API, katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache,
 modele (CNN, CRNN, transfer), augmentacje (basic i full), pętla treningu, metryki (macro-F1,
@@ -178,7 +194,7 @@ balanced accuracy, per-class, pary pomyłek), agregacja mean/vote z coverage, an
 bird_recognizer/
 ├── project info/          # SPEC.md, PLAN.md, AGENTS.md
 ├── configs/               # default.yaml (progi), species.yaml (12 gatunków)
-├── src/bird_recognizer/   # config, errors, logging_setup, cli, models_registry, ablation
+├── src/bird_recognizer/   # config, errors, logging_setup, cli, models_registry, ablation, demo
 │   ├── xc/                # client, catalog, download
 │   ├── data/              # splits, audio, windows, spectrogram, dataset (cache)
 │   ├── models/            # cnn, crnn, transfer, mfcc_baseline
@@ -200,7 +216,11 @@ Pełne drzewo: `project info/SPEC.md` §5. Dane (`data/`) i wyniki (`runs/`) są
 - Nagrania wielogatunkowe (pole `also`) to szum etykiet.
 - Gatunki chronione są zredagowane w API — nie mają plików audio.
 - Własne nagrania z telefonu to inna domena (tło miasta, odległość) — spadek jakości jest
-  oczekiwany i raportowany osobno.
+  oczekiwany i raportowany osobno. **Zbioru własnego jeszcze nie ma**, więc sekcja `own`
+  w raporcie jest pusta (nie podstawiamy w zamian żadnych danych).
+- **Nieprzebadane grupy ablacji:** wyniki w tabeli dotyczą grupy `rnn` (pełny zbiór). Grupa
+  `pretrained` przerwała się awarią CUDA (`0xC0000409`) i wymaga powtórzenia; `aug`, `pool`
+  i `window` są w toku. Nie wolno ich prezentować jako zbadanych, dopóki nie ma runów.
 - Trening na GPU bywa niedeterministyczny mimo seeda; raportujemy urządzenie przy każdym runie.
 - Grupy nagrywających są bardzo nierówne (jeden nagrywający = setki plików), więc train zbiera
   kilku najpłodniejszych, a val/test — dziesiątki mniejszych; podział jest deterministyczny
@@ -235,6 +255,17 @@ w `data/catalog.jsonl`; poniżej rozkład licencji dla 2917 nagrań z katalogu (
 | CC BY-NC-ND 3.0 | 106 |
 | CC BY-NC 4.0 | 1 |
 | CC BY-SA 4.0 | 1 |
+
+Przykładowe wiersze atrybucji (po jednym na gatunek; pełna lista w `data/catalog.jsonl`):
+
+| id | gatunek | nagrywający | licencja | link |
+|---|---|---|---|---|
+| 1011513 | bogatka | Romuald Mikusek | CC BY-NC-SA 4.0 | https://xeno-canto.org/1011513 |
+| 1016951 | dzwoniec | Romuald Mikusek | CC BY-NC-SA 4.0 | https://xeno-canto.org/1016951 |
+| 1010375 | kos | Grzegorz Michalski | CC BY-NC-SA 4.0 | https://xeno-canto.org/1010375 |
+| 1006668 | kwiczoł | Grzegorz Michalski | CC BY-NC-SA 4.0 | https://xeno-canto.org/1006668 |
+| 1029103 | mazurek | Romuald Mikusek | CC BY-NC-SA 4.0 | https://xeno-canto.org/1029103 |
+| 101375 | modra | Krzysztof Deoniziak | CC BY-NC-ND 2.5 | https://xeno-canto.org/101375 |
 
 Nagrania są używane wyłącznie do celów badawczych/edukacyjnych (większość licencji zabrania
 użycia komercyjnego); pliki audio nie trafiają do repozytorium.

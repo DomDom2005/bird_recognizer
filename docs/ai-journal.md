@@ -24,6 +24,9 @@
 | 2026-11-21 | 7 | `eval/metrics.py` (+balanced accuracy, per-class P/R/F1, pary), `eval/aggregate.py` (vote, coverage), `eval/error_analysis.py` (metadane, MD+CSV), `eval/evaluate.py` (ładowanie runu z własnego configu), CLI `eval`/`aggregate`/`error-analysis`, sekcje 3–4 w `report` | bramka etapu 7: `ruff` czysty, **253 testy**, pokrycie `eval/` **96%**, `eval`/`aggregate`/`error-analysis` exit 0 na runie `20261120-231935-crnn-rnn-crnn-gru-s42`, ręczne macro-F1 25/36 zgodne z kodem | trafne po poprawce `balanced_accuracy` (sklearn nie przyjmuje `labels`; liczone jako macro recall) |
 | 2026-11-21 | 7 | uruchomienie na 3 runach `rnn` (smoke): 307 nagrań test, 11 020 okien; powstały `per_class.csv`, `confusion_matrix.png`, `predictions.csv`, `analysis/errors.md` i CSV; `docs/experiments.md` zyskało tabelę 4 par mylących (np. pierwiosnek F1 0,11–0,18, piecuszek 0,11–0,14) | `report` regeneruje sekcje 3–4; sekcja 4 jawnie „brak nagrań własnych” (zadanie człowieka) | trafne; liczby z runów smoke — nie są wynikami badania |
 | 2026-11-21 | — | tożsamość git: autor commitów był `DomD9m` (globalny config), a właściciel chce konto GitHub `DomDom2005` i mail `dominik.karbowniczak2005@gmail.com`; ustawiono config lokalny i globalny, przepisano 14 commitów (`git filter-branch`, autor i committer), poprawiono odwołania do hashy w dzienniku i przemapowano `git_sha` w `runs/index.csv`/`env.txt` | `git log --format='%an <%ae>'` → tylko `DomDom2005 <dominik.karbowniczak2005@gmail.com>`; drzewa commitów bez zmian (te same treści), więc odtwarzalność runów zachowana; stare commity w `refs/original/` | trafne; mapa starych i nowych hashy w odstępstwie 47 |
+| 2026-11-21 | 8 | `demo.py` + CLI `demo` (Gradio: plik → top-3 + spektrogram z oknami + karta modelu; `--smoke` bez serwera), README w 11 sekcjach z tabelą licencji i przykładową atrybucją, sekcja ograniczeń, `experiments.md` z pełnymi runami `rnn` | bramka etapu 8: `ruff` czysty, **257 testów**, `demo --run 20261121-180015-crnn-rnn-crnn-gru-s42 --smoke` exit 0 (top-3 na tonie syntetycznym), `git ls-files` bez audio i `.env` | trafne |
+| 2026-11-21 | 8 | pełne runy `rnn` na całym zbiorze (15 epok, early stopping, GPU): test macro-F1 CNN 0,704 / CRNN-GRU 0,707 / CRNN-LSTM 0,668; top-3 0,883/0,912/0,906; `eval` i `error-analysis` na najlepszym runie, pary mylące w `experiments.md` | 307 nagrań testowych, 11 020 okien; `error-analysis`: bogatka→modra (6), rudzik→modra (5); 3/10 najgorszych z `also` (podejrzenie szumu etykiet) | trafne; różnica CNN vs CRNN-GRU +0,003 = szum jednego seeda, więc **nie** ogłaszamy przewagi rekurencji |
+| 2026-11-21 | 8 | przegląd DoD (15.15) i domknięcie dziennika: 9/10 punktów zweryfikowanych; otwarte tylko „czysty venv" (brak w sandboxie) oraz zbiór własny i wnioski (człowiek) | README 11 sekcji, brak audio/sekretów w repo, `check_leakage` OK, `TODO(verify)` rozwiązane lub `ODŁOŻONE (D12)` | trafne; macierz ablacji domyka się po etapie 8 — patrz odstępstwa 48 i 52 |
 
 ## Odstępstwa od SPEC
 
@@ -232,6 +235,29 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     odwołania w tym dzienniku. Stare commity zostały w `refs/original/`; repo nie ma remote'a,
     więc nie było force-pushu. Repozytorium docelowe `github.com/DomDom2005/bird_recognizer`
     jest potwierdzone, ale **jeszcze nie utworzone** na GitHubie (TODO w SPEC rozwiązane).
+48. **Grupa `pretrained` przerwała się awarią CUDA (etap 8).** Podczas macierzy proces zakończył
+    się kodem `-1073741571` = `0xC0000409` (STATUS_STACK_BUFFER_OVERRUN) zaraz po starcie
+    transferu. Wcześniejsze runy transferu (`--smoke`, `--scratch`, `--pretrained`) przechodziły,
+    więc to nie jest błąd logiki modelu. **Nie oznaczamy grupy jako zbadanej** — trzeba ją
+    powtórzyć pojedynczo, z logiem, po zamknięciu etapu 8. Hipotezy do sprawdzenia: konflikt
+    buildów CUDA/CPU (torchvision i torchaudio są CPU), pamięć/karta, sterownik.
+49. **Pełne wyniki `rnn` i ich interpretacja.** Test macro-F1: CNN 0,704, CRNN-GRU 0,707,
+    CRNN-LSTM 0,668 (ten sam split, seed, budżet). Różnica CNN vs CRNN-GRU to **+0,003**, czyli
+    szum jednego seeda — dlatego w README napisane jest wprost, że **nie ma podstaw do ogłoszenia
+    przewagi rekurencji**. Potwierdzenie wymaga 3 seedów; decyzja i wnioski należą do człowieka.
+50. **Trzy runy `rnn` z różnych commitów dokumentacyjnych.** Powstały przy `04d9491`, `c6a73fd`
+    i `8788407` — między nimi zmieniały się tylko dokumenty (przewodnik, APP_SPEC), kod modeli
+    był identyczny, więc porównanie jest ważne. `git_sha` w tabeli pokazuje różne wartości; to
+    nie jest druga zmiana w eksperymencie.
+51. **DoD „czysty venv" niezweryfikowany.** W środowisku agenta instalacja jest globalna
+    (sandbox blokował `venv`/`pip` na początku projektu), więc nie mogę uczciwie odhaczyć
+    `pip install … && pytest` na czystym środowisku. Punkt zostaje `[ ]` z notą; `pytest`
+    przechodzi w środowisku referencyjnym (257 testów).
+52. **Etap 8 zamknięty, choć macierz ablacji jeszcze się liczy.** Świadoma decyzja: etap 8 to
+    demo + raport + domknięcie, a pełna macierz (5 grup) domyka się **po** nim. `experiments.md`
+    zawiera już prawdziwe wyniki grupy `rnn` (nie smoke), a grupy `aug`, `pool`, `window`
+    dojdą w follow-upie; `pretrained` wymaga powtórzenia (odstępstwo 48). Nie oznaczamy ich
+    jako zbadanych, dopóki nie ma runów.
 
 ## Wznowienie po przerwie (2026-11-18)
 
@@ -247,6 +273,20 @@ nic niezacommitowanego (poza `data/`, które jest poza repo).
   odwołania w §15.8–15.10; testy generują krótkie WAV-y w `tmp_dir`, a `--smoke` korzysta
   z realnego katalogu z `--limit` (patrz odstępstwo 18).
 - **Pierwszy krok nowej sesji:** §15.5 — `git log` → tabela 15.1 → karta etapu 3 → ten wpis.
+
+## Domknięcie etapu 8 (2026-11-21)
+
+Wersja minimalna (etapy 1–8) domknięta; repo wypchnięte na GitHub (`main`).
+
+- **Gotowe:** dane i cache (2897 nagrań), cztery rodziny modeli, macierz ablacji (kod + pełna
+  grupa `rnn`), ewaluacja i analiza błędów, generator `docs/experiments.md`, demo online/offline.
+- **Wyniki (pełny zbiór, grupa `rnn`):** test macro-F1 0,704 (CNN) / 0,707 (CRNN-GRU) /
+  0,668 (CRNN-LSTM); top-3 0,883/0,912/0,906. Różnica CNN vs GRU w granicach szumu.
+- **Otwarte po etapie 8:** dokończenie macierzy (`aug`, `pool`, `window` w toku; `pretrained`
+  do powtórzenia po awarii CUDA), zbiór własny z telefonu, wnioski w `experiments.md`,
+  opcjonalna aplikacja A+B (`project info/APP_SPEC.md`).
+- **Jak wznowić:** `git log --oneline -5` → SPEC §15 (tabela 15.1, karta etapu 9 / APP-1)
+  → ten dziennik (odstępstwa 48–52).
 
 ## Refleksja
 

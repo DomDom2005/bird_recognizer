@@ -6,30 +6,30 @@
 
 | run | model | okno [s] | aug | pretrained | pooling | okna train | okna val | okna test | val macro-F1 (nagrania) | test macro-F1 (nagrania) | test top-1 | test top-3 | Δ test vs ref | seed | urządzenie |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 20261120-231932-cnn-rnn-cnn-s42 | cnn | 3.0 | basic | none |  | 762 | 910 | 825 | 0.067 | 0.049 | 0.083 | 0.292 | +0.000 | 42 | cuda |
-| 20261120-231935-crnn-rnn-crnn-gru-s42 | crnn | 3.0 | basic | none | mean | 762 | 910 | 825 | 0.064 | 0.045 | 0.083 | 0.167 | -0.004 | 42 | cuda |
-| 20261120-231938-crnn-rnn-crnn-lstm-s42 | crnn | 3.0 | basic | none | mean | 762 | 910 | 825 | 0.057 | 0.062 | 0.083 | 0.167 | +0.014 | 42 | cuda |
+| 20261121-172521-cnn-rnn-cnn-s42 | cnn | 3.0 | basic | none |  | 95898 | 24982 | 11020 | 0.686 | 0.704 | 0.736 | 0.883 | +0.000 | 42 | cuda |
+| 20261121-180015-crnn-rnn-crnn-gru-s42 | crnn | 3.0 | basic | none | mean | 95898 | 24982 | 11020 | 0.722 | 0.707 | 0.739 | 0.912 | +0.004 | 42 | cuda |
+| 20261121-184233-crnn-rnn-crnn-lstm-s42 | crnn | 3.0 | basic | none | mean | 95898 | 24982 | 11020 | 0.707 | 0.668 | 0.730 | 0.906 | -0.035 | 42 | cuda |
 
-Legenda: `Δ test vs ref` to różnica test macro-F1 (na poziomie nagrania) względem runu referencyjnego `20261120-231932-cnn-rnn-cnn-s42`. `n/d` = pole niedostępne (np. top-3 przy mniej niż 3 klasach). Wiersze z `smoke` w uwagach są przebiegami technicznymi na 2 nagraniach na gatunek — nie są wynikami badania; dotyczy to także sekcji 3–4, bo korzystają z tych samych runów (`eval_test`/`eval_own`).
+Legenda: `Δ test vs ref` to różnica test macro-F1 (na poziomie nagrania) względem runu referencyjnego `20261121-172521-cnn-rnn-cnn-s42`. `n/d` = pole niedostępne (np. top-3 przy mniej niż 3 klasach). Wiersze z `smoke` w uwagach są przebiegami technicznymi na 2 nagraniach na gatunek — nie są wynikami badania; dotyczy to także sekcji 3–4, bo korzystają z tych samych runów (`eval_test`/`eval_own`).
 
 ## 2. Runy i seedy
 
-- `20261120-231932-cnn-rnn-cnn-s42` — seed 42, cuda, git c3e6f3bb, uwagi: rnn:cnn; smoke
-- `20261120-231935-crnn-rnn-crnn-gru-s42` — seed 42, cuda, git c3e6f3bb, uwagi: rnn:crnn-gru; smoke
-- `20261120-231938-crnn-rnn-crnn-lstm-s42` — seed 42, cuda, git c3e6f3bb, uwagi: rnn:crnn-lstm; smoke
+- `20261121-172521-cnn-rnn-cnn-s42` — seed 42, cuda, git 04d94912, uwagi: rnn:cnn
+- `20261121-180015-crnn-rnn-crnn-gru-s42` — seed 42, cuda, git c6a73fdf, uwagi: rnn:crnn-gru
+- `20261121-184233-crnn-rnn-crnn-lstm-s42` — seed 42, cuda, git 87884073, uwagi: rnn:crnn-lstm
 
 ## 3. Pary mylące
 
-| para | gatunek | 20261120-231932-cnn-rnn-cnn-s42 | 20261120-231935-crnn-rnn-crnn-gru-s42 | 20261120-231938-crnn-rnn-crnn-lstm-s42 |
+| para | gatunek | 20261121-172521-cnn-rnn-cnn-s42 | 20261121-180015-crnn-rnn-crnn-gru-s42 | 20261121-184233-crnn-rnn-crnn-lstm-s42 |
 |---|---|---|---|---|
-| wrobel-mazurek | wróbel | 0.000 | 0.020 | 0.000 |
-| wrobel-mazurek | mazurek | 0.200 | 0.000 | 0.118 |
-| bogatka-modra | bogatka | 0.000 | 0.167 | 0.143 |
-| bogatka-modra | modra | 0.000 | 0.000 | 0.130 |
-| kos-kwiczol | kos | 0.000 | 0.061 | 0.105 |
-| kos-kwiczol | kwiczoł | 0.000 | 0.043 | 0.000 |
-| pierwiosnek-piecuszek | pierwiosnek | 0.175 | 0.110 | 0.167 |
-| pierwiosnek-piecuszek | piecuszek | 0.107 | 0.133 | 0.135 |
+| wrobel-mazurek | wróbel | 0.500 | 0.500 | 0.200 |
+| wrobel-mazurek | mazurek | 0.710 | 0.774 | 0.667 |
+| bogatka-modra | bogatka | 0.674 | 0.676 | 0.727 |
+| bogatka-modra | modra | 0.629 | 0.615 | 0.638 |
+| kos-kwiczol | kos | 0.814 | 0.771 | 0.690 |
+| kos-kwiczol | kwiczoł | 0.740 | 0.800 | 0.747 |
+| pierwiosnek-piecuszek | pierwiosnek | 0.761 | 0.733 | 0.779 |
+| pierwiosnek-piecuszek | piecuszek | 0.938 | 0.733 | 0.714 |
 
 ## 4. Zbiór własny
 

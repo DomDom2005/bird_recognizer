@@ -12,7 +12,7 @@ właściciel projektu. Odhaczaj i dopisuj datę.
 | 5 | Nagrania własne telefonem: 20–50 klipów 5–30 s + arkusz etykiet | `[ ]` | pliki w `data/own/<gatunek>/*.wav|mp3|flac|ogg` (poza repo); bez nich `eval --split own` kończy się kodem 3, a raport jawnie pokazuje brak |
 | 6 | Decyzja o dostępie do GPU (Colab/Kaggle) na pełne ablacje | `[x]` | 2026-11-21 — lokalna RTX 5070 12 GB; zainstalowany `torch 2.15.0+cu132` (decyzja właściciela), pełne runy macierzy na GPU |
 | 7 | Odsłuch próbki pobranych nagrań (błędy etykiet, gatunki w tle) | `[ ]` | człowiek; `data/catalog.jsonl` ma `q`, `type`, `also`, `rmk` do przeglądu |
-| 8 | Wnioski w `docs/experiments.md` i „Refleksja” w dzienniku | `[ ]` | etap 8 — agent dostarcza tabelę i zostawia miejsce |
+| 8 | Wnioski w `docs/experiments.md` i „Refleksja” w dzienniku | `[ ]` | tabela gotowa (pełne wyniki `rnn`: 0,704/0,707/0,668 test macro-F1); wnioski i refleksję uzupełnia człowiek |
 | 9 | Decyzja o rozszerzeniach (D12, wieloetykietowość) | `[ ]` | po pierwszych pełnych wynikach |
 
 ## Uwagi środowiskowe

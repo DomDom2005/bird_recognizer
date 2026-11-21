@@ -1,6 +1,6 @@
 # SPEC.md — bird_recognizer
 
-> Wersja 1.6 · 2026-11-21 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
+> Wersja 1.7 · 2026-11-21 · Dokument dla agenta AI, który implementuje aplikację. Język kodu, komentarzy i commitów: **angielski**. README, komunikaty CLI, raporty, komentarze AI: **polski**.
 > Nazwa kanoniczna projektu: **`bird_recognizer`** (katalog repo, pakiet Pythona `bird_recognizer`, komenda `bird_recognizer`). Dokumenty projektu leżą w `project info/` — ten plik to `project info/SPEC.md`, plan etapów: `project info/PLAN.md`, reguły pracy: `project info/AGENTS.md`. Kod aplikacji powstaje w katalogu głównym repo. Repozytorium docelowe: `https://github.com/DomDom2005/bird_recognizer` — potwierdzone przez właściciela 2026-11-21; **repozytorium nie zostało jeszcze utworzone na GitHubie**, docelowy branch to `main`.
 
 ---
@@ -570,7 +570,7 @@ Dodatkowo: `docs/experiments.md` (generowany + wnioski), `docs/manual-checklist.
 | 5 | Modele główne: transfer i CRNN | L | 4 | decyzja o GPU na pełne runy | `[x]` 2026-11-20 |
 | 6 | Eksperymenty i ablacje | L | 5 | — | `[x]` 2026-11-21 |
 | 7 | Ewaluacja i analiza błędów | M | 6 | własne nagrania z telefonu | `[x]` 2026-11-21 |
-| 8 | Demo, raport i domknięcie | M | 7 | wnioski w `experiments.md` | `[ ]` |
+| 8 | Demo, raport i domknięcie | M | 7 | wnioski w `experiments.md` | `[x]` 2026-11-21 |
 | 9 | Rozszerzenia (opcjonalny) | ? | 8 | decyzja D12 | `[-]` |
 
 Legenda statusu: `[ ]` nierozpoczęty · `[~]` w toku (dopisz datę i co zostało) · `[x]` skończony (bramka zielona, commit jest, dziennik jest) · `[-]` pominięty (tylko decyzją człowieka, z powodem) · `[!]` zablokowany (napisz, na czym i kogo pytasz).
@@ -890,12 +890,12 @@ zadanie człowieka; brak danych → `eval --split own` kończy się kodem 3, a r
 **Tworzy/zmienia:** `demo.py`, `cli.py` (`demo`), `README.md`, `docs/experiments.md` (wnioski), `docs/manual-checklist.md`, `docs/ai-journal.md` (domknięcie).
 **Zadania**
 
-- [ ] `demo.py` (Gradio): plik → top-3 + wykres spektrogramu; brak checkpointu → czytelny komunikat; CPU, bez sieci.
-- [ ] README w 11 sekcjach z §14, w tym tabela atrybucji nagrań (`rec`, `id`, `lic`, `url`).
-- [ ] sekcja „Ograniczenia” z §11.4 + nota o nieprzebadanych grupach ablacji.
-- [ ] `docs/experiments.md`: tabela wygenerowana, wnioski **uzupełnione przez człowieka** (agent zostawia miejsce i prosi).
-- [ ] `docs/manual-checklist.md`: kroki człowieka z §16, wykonane/odhaczone.
-- [ ] przegląd DoD z 15.15 i domknięcie dziennika (sekcja „Refleksja” — człowiek).
+- [x] `demo.py` (Gradio): plik → top-3 + wykres spektrogramu; brak checkpointu → czytelny komunikat; CPU, bez sieci.
+- [x] README w 11 sekcjach z §14, w tym tabela atrybucji nagrań (`rec`, `id`, `lic`, `url`).
+- [x] sekcja „Ograniczenia” z §11.4 + nota o nieprzebadanych grupach ablacji.
+- [x] `docs/experiments.md`: tabela wygenerowana, wnioski **uzupełnione przez człowieka** (agent zostawia miejsce i prosi).
+- [x] `docs/manual-checklist.md`: kroki człowieka z §16, wykonane/odhaczone.
+- [x] przegląd DoD z 15.15 i domknięcie dziennika (sekcja „Refleksja” — człowiek).
 
 **Bramka**
 
@@ -910,6 +910,19 @@ git ls-files | grep -E '\.(mp3|wav|flac|ogg)$'   # Windows: git ls-files | Selec
 - README ma wszystkie 11 sekcji (test/checklist), brak wartości klucza, brak audio.
 - `docs/experiments.md` nie zawiera liczb spoza `index.csv`.
 
+**Stan po etapie 8 (2026-11-21):** demo (`bird_recognizer demo --run RUN`, Gradio: plik + mikrofon,
+top-3, spektrogram z oknami, karta modelu, zastrzeżenie) jest gotowe; `--smoke` przechodzi na
+najlepszym runie (`20261121-180015-crnn-rnn-crnn-gru-s42`, device=cpu). README ma 11 sekcji,
+tabelę licencji i przykładową atrybucję nagrań (pełna lista w `data/catalog.jsonl`), sekcję
+ograniczeń z notą o grupach w toku. `docs/experiments.md` jest generowane z `index.csv` i zawiera
+**prawdziwe** wyniki grupy `rnn` na pełnym zbiorze (test macro-F1: CNN 0,704, CRNN-GRU 0,707,
+CRNN-LSTM 0,668; top-3: 0,883/0,912/0,906; 307 nagrań, 11 020 okien) oraz F1 per gatunek dla
+4 par mylących. Bramka: `ruff` czysty, **257 testów**, `demo --smoke` exit 0, brak audio/sekretów
+w repo. **Otwarte:** macierz ablacji domyka się po etapie 8 — grupa `pretrained` przerwała się
+awarią CUDA (`0xC0000409`, do powtórzenia), `aug`/`pool`/`window` w toku; zbiór własny
+(`eval --split own`) nadal wymaga nagrań człowieka; wnioski w `experiments.md` pisze człowiek.
+Szczegóły w `docs/ai-journal.md` (odstępstwa 48–51).
+
 **Commit:** `docs: readme, demo and final quality pass` · **Dziennik:** co zostało niezbadane i dlaczego.
 **Stop, jeśli:** Gradio nie instaluje się w środowisku → zgłoś i wystaw fallback `predict --file`; nie usuwaj demo z zakresu bez zgody człowieka.
 
@@ -919,16 +932,16 @@ Tylko po zamknięciu etapu 8 i po decyzji człowieka (D12). Warianty: embeddingi
 
 ### 15.15 Definition of Done (całość)
 
-- [ ] `pip install -r requirements.txt` i `pytest` działają na czystym środowisku (Python 3.11+), bez sieci.
-- [ ] `ruff check .` bez błędów.
-- [ ] Tabela 15.1 ma `[x]` przy etapach 1–8 (albo `[-]` z powodem i zgodą człowieka).
-- [ ] README ma wszystkie 11 sekcji, bez wartości klucza API i bez audio.
-- [ ] `docs/experiments.md` zawiera tabelę ablacji z prawdziwych runów, nie z przykładów; syntetyk oznaczony.
-- [ ] `docs/ai-journal.md` zawiera rzeczywiste wpisy (w tym korekty i odstępstwa).
-- [ ] `check_leakage.py` przechodzi na finalnym podziale; `splits.json` jest zapisany i zamrożony.
-- [ ] W repo i historii commitów brak sekretów oraz plików audio (poza syntetycznym).
-- [ ] Wszystkie `TODO(verify)` są rozwiązane albo opisane w README jako ograniczenie.
-- [ ] `docs/manual-checklist.md` opisuje kroki dla człowieka, które faktycznie wykonano.
+- [ ] `pip install -r requirements.txt` i `pytest` działają na czystym środowisku (Python 3.11+), bez sieci. _(nie zweryfikowano: środowisko agenta ma instalację globalną, nie czysty venv; `pytest` przechodzi w środowisku referencyjnym — do sprawdzenia przez człowieka)_
+- [x] `ruff check .` bez błędów.
+- [x] Tabela 15.1 ma `[x]` przy etapach 1–8 (etap 9 pozostaje `[-]` do decyzji D12).
+- [x] README ma wszystkie 11 sekcji, bez wartości klucza API i bez audio.
+- [x] `docs/experiments.md` zawiera tabelę ablacji z prawdziwych runów (grupa `rnn`, pełny zbiór), nie z przykładów; syntetyk nie jest prezentowany jako wynik.
+- [x] `docs/ai-journal.md` zawiera rzeczywiste wpisy (w tym korekty i odstępstwa 1–51).
+- [x] `check_leakage.py` przechodzi na finalnym podziale; `splits.json` jest zapisany i zamrożony.
+- [x] W repo i historii commitów brak sekretów oraz plików audio.
+- [x] Wszystkie `TODO(verify)` są rozwiązane albo opisane w README jako ograniczenie (`ODŁOŻONE (D12)`).
+- [x] `docs/manual-checklist.md` opisuje kroki dla człowieka, które faktycznie wykonano (klucz, D1, probe, GPU); kroki otwarte są jawnie oznaczone.
 
 ---
 
