@@ -193,6 +193,16 @@ def build_parser() -> argparse.ArgumentParser:
     errors.add_argument("--split", choices=["val", "test"], default="test")
     errors.add_argument("--top", type=int, default=10, help="ile par pomyłek pokazać")
 
+    demo = sub.add_parser("demo", help="demo Gradio: plik → top-3 gatunki")
+    demo.add_argument("--run", required=True)
+    demo.add_argument("--port", type=int, default=7860)
+    demo.add_argument(
+        "--smoke",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="nie uruchamiaj serwera: sprawdź ścieżkę na syntetycznym tonie",
+    )
+
     return parser
 
 
@@ -970,6 +980,20 @@ def _cmd_error_analysis(config: Config, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_demo(config: Config, args: argparse.Namespace) -> int:
+    """Gradio demo; ``--smoke`` checks the path without starting a server (FR-13)."""
+    from . import demo as demo_module
+
+    device = _resolve_device(args)
+    bundle = evaluate_module.load_run(config, args.run, device=device)
+    if args.smoke:
+        return demo_module.smoke_check(bundle)
+    print(f"Demo: run {bundle.run_id}, model {bundle.model_name}, device {device}")
+    print(f"  otwieram http://127.0.0.1:{args.port} (Ctrl+C kończy)")
+    demo_module.launch(bundle, port=args.port)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point; maps :class:`AppError` to the exit codes from SPEC §8."""
     configure_console()
@@ -998,6 +1022,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_aggregate(config, args)
         if args.command == "error-analysis":
             return _cmd_error_analysis(config, args)
+        if args.command == "demo":
+            return _cmd_demo(config, args)
         if args.command == "train":
             if args.train_command == "mfcc":
                 return _cmd_train_mfcc(config, args)

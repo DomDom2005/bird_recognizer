@@ -114,6 +114,15 @@ bird_recognizer eval --run RUN --split own     # zbiór własny: data/own/<gatun
 Zbiór własny (`--split own`) czytamy z `data/own/<gatunek>/`; brak katalogu oznacza kod 3
 i jawne „brak nagrań własnych” w raporcie — nic nie jest podstawiane w zamian.
 
+Demo (etap 8):
+
+```bash
+bird_recognizer demo --run RUN             # Gradio: plik → top-3 + spektrogram z oknami
+bird_recognizer demo --run RUN --smoke     # bez serwera: sprawdza ścieżkę na tonie syntetycznym
+```
+
+Demo działa na CPU, bez sieci; brak `best.pt` daje czytelny komunikat (kod 4), nie traceback.
+
 Każdy przebieg zapisuje `runs/<run_id>/{config.yaml, env.txt, metrics.json, metrics.jsonl,
 best.pt | model.joblib}` i dopisuje wiersz do `runs/index.csv`.
 
@@ -192,18 +201,33 @@ Pełne drzewo: `project info/SPEC.md` §5. Dane (`data/`) i wyniki (`runs/`) są
   i bez wycieku, ale nie jest losowaniem pojedynczych nagrań.
 - Liczby w README to snapshoty z podaną datą; katalog xeno-canto rośnie, więc przed kolejnym
   etapem odśwież `data catalog` i zapisz nowe wartości.
-- Cache spektrogramów zajmuje **~1,5 MB na minutę audio** (~5,6 GB dla całego zbioru), więc
-  `data/cache` trzymaj poza repo i usuwaj, gdy brakuje miejsca — jest w pełni odtwarzalny.
+- Cache spektrogramów zajmuje **~1,6 MB na minutę audio** (6,06 GB dla 2897 nagrań / 3756 min),
+  więc `data/cache` trzymaj poza repo i usuwaj, gdy brakuje miejsca — jest w pełni odtwarzalny.
 - Bramka ciszy (`abs_floor` ≈ −60 dBFS RMS) odrzuca bardzo ciche nagrania w całości
-  (`empty_after_gating`); na próbce 24 nagrań dotyczyło to 2 (peak −42 i −34 dBFS).
+  (`empty_after_gating`); na pełnym zbiorze dotyczyło to 19 nagrań, a 1 nie dało się zdekodować
+  (razem 20/2917 bez cache; 0 w zbiorze testowym).
 - `TODO(verify)` z `project info/SPEC.md` §4.3 są otwarte do czasu uruchomienia `probe_api.py --live`.
 
 ## 10. Bezpieczeństwo i licencje
 
 - Klucz API tylko w `.env` (poza repo). Klucz jedzie w query stringu, więc logi maskują `key=...`.
 - Nagrania i wytrenowane modele nie są commitowane; repo zawiera kod, konfigurację i dokumentację.
-- Atrybucja nagrań (gatunek, nagrywający, numer XC, licencja, link) trafi do raportu i demo
-  w etapie 8.
+
+**Atrybucja nagrań.** Pełna lista (`id`, `rec`, `lic`, link `https://xeno-canto.org/<id>`) jest
+w `data/catalog.jsonl`; poniżej rozkład licencji dla 2917 nagrań z katalogu (stan 2026-11-21):
+
+| Licencja | Nagrania |
+|---|---|
+| CC BY-NC-SA 4.0 | 1940 |
+| CC BY-NC-ND 4.0 | 521 |
+| CC BY-NC-SA 3.0 | 223 |
+| CC BY-NC-ND 2.5 | 125 |
+| CC BY-NC-ND 3.0 | 106 |
+| CC BY-NC 4.0 | 1 |
+| CC BY-SA 4.0 | 1 |
+
+Nagrania są używane wyłącznie do celów badawczych/edukacyjnych (większość licencji zabrania
+użycia komercyjnego); pliki audio nie trafiają do repozytorium.
 
 ## 11. Dziennik AI
 

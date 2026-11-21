@@ -200,7 +200,7 @@ def split_recording_scores(bundle: RunBundle, split: str) -> RecordingScores:
     )
 
 
-def _model_probs(
+def model_probs(
     model: nn.Module,
     windows: np.ndarray,
     lengths: list[int],
@@ -264,7 +264,7 @@ def own_recording_scores(bundle: RunBundle, own_dir: Path | None = None) -> Reco
                 LOGGER.warning("%s: brak okien po bramkowaniu ciszy", path)
                 continue
             array = np.stack(frames).astype(np.float32)
-            probs = _model_probs(bundle.model, array, lengths, bundle.device)
+            probs = model_probs(bundle.model, array, lengths, bundle.device)
             recording_id = f"{species_pl}/{path.name}"
             order.append(recording_id)
             scores.append(probs.mean(axis=0))
