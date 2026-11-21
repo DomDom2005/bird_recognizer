@@ -228,7 +228,7 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
 Praca przerwana na życzenie właściciela; wszystko jest w spójnym stanie i nie ma
 nic niezacommitowanego (poza `data/`, które jest poza repo).
 
-- **Zrobione:** etap 1 `[x]`, etap 2 `[x]` (commity `e715514`, `1d77624`, `a5f1a11`).
+- **Zrobione:** etap 1 `[x]`, etap 2 `[x]` (commity `5ae3fcf`, `75b3bf9`, `61bdf52`).
 - **Nierozpoczęte:** etap 3 (preprocessing i cache) — karta w SPEC §15.8.
 - **Pobieranie audio przerwane na 169/2917 plikach** (`data/raw`). Wznowienie:
   `python -m bird_recognizer.cli data download` — pomija istniejące pliki; jeśli w raporcie

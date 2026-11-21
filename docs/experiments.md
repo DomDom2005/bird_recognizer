@@ -14,9 +14,9 @@ Legenda: `Δ test vs ref` to różnica test macro-F1 (na poziomie nagrania) wzgl
 
 ## 2. Runy i seedy
 
-- `20261120-231932-cnn-rnn-cnn-s42` — seed 42, cuda, git fcc45579, uwagi: rnn:cnn; smoke
-- `20261120-231935-crnn-rnn-crnn-gru-s42` — seed 42, cuda, git fcc45579, uwagi: rnn:crnn-gru; smoke
-- `20261120-231938-crnn-rnn-crnn-lstm-s42` — seed 42, cuda, git fcc45579, uwagi: rnn:crnn-lstm; smoke
+- `20261120-231932-cnn-rnn-cnn-s42` — seed 42, cuda, git c3e6f3bb, uwagi: rnn:cnn; smoke
+- `20261120-231935-crnn-rnn-crnn-gru-s42` — seed 42, cuda, git c3e6f3bb, uwagi: rnn:crnn-gru; smoke
+- `20261120-231938-crnn-rnn-crnn-lstm-s42` — seed 42, cuda, git c3e6f3bb, uwagi: rnn:crnn-lstm; smoke
 
 ## 3. Pary mylące
 
