@@ -1,4 +1,4 @@
-"""Gradio demo: upload a recording, get top-3 species and the spectrogram (SPEC FR-13).
+"""Gradio demo: record or upload a recording, get top-3 species and the spectrogram (FR-13).
 
 Runs on CPU, without network. The model is loaded from a training run exactly like
 ``eval`` does (run's own config and checkpoint). ``--smoke`` never starts the server:
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 import numpy as np
@@ -117,14 +118,21 @@ def predict_for_ui(bundle: RunBundle, path: str | None):
 
 def build_app(bundle: RunBundle):
     """Build (but do not launch) the Gradio Blocks app."""
+    # Gradio pings analytics endpoints on launch; the demo must stay offline (FR-13).
+    os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
     import gradio as gr
 
     with gr.Blocks(title="bird_recognizer") as app:
         gr.Markdown(
             "# bird_recognizer — demo\n"
-            "Wgraj nagranie ptaka; model zwraca top-3 gatunki i spektrogram z oknami."
+            "Nagraj ptaka mikrofonem albo wgraj plik; model zwraca top-3 gatunki "
+            "i spektrogram z oknami."
         )
-        audio = gr.Audio(type="filepath", label="Nagranie (wav / mp3 / ogg / flac)")
+        audio = gr.Audio(
+            sources=["microphone", "upload"],
+            type="filepath",
+            label="Nagraj lub wybierz nagranie (wav / mp3 / ogg / flac)",
+        )
         with gr.Row():
             label = gr.Label(num_top_classes=3, label="Top-3 gatunki")
             plot = gr.Plot(label="Spektrogram")
