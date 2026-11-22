@@ -28,6 +28,7 @@
 | 2026-11-21 | 8 | pełne runy `rnn` na całym zbiorze (15 epok, early stopping, GPU): test macro-F1 CNN 0,704 / CRNN-GRU 0,707 / CRNN-LSTM 0,668; top-3 0,883/0,912/0,906; `eval` i `error-analysis` na najlepszym runie, pary mylące w `experiments.md` | 307 nagrań testowych, 11 020 okien; `error-analysis`: bogatka→modra (6), rudzik→modra (5); 3/10 najgorszych z `also` (podejrzenie szumu etykiet) | trafne; różnica CNN vs CRNN-GRU +0,003 = szum jednego seeda, więc **nie** ogłaszamy przewagi rekurencji |
 | 2026-11-21 | 8 | przegląd DoD (15.15) i domknięcie dziennika: 9/10 punktów zweryfikowanych; otwarte tylko „czysty venv" (brak w sandboxie) oraz zbiór własny i wnioski (człowiek) | README 11 sekcji, brak audio/sekretów w repo, `check_leakage` OK, `TODO(verify)` rozwiązane lub `ODŁOŻONE (D12)` | trafne; macierz ablacji domyka się po etapie 8 — patrz odstępstwa 48 i 52 |
 | 2026-11-22 | 8 | diagnoza awarii grupy `pretrained`: Podgląd zdarzeń wskazał `cublasLt64_13.dll`, `0xc00000fd` (przepełnienie stosu); repro na minimalnym ResNet18 potwierdziło, że ten sam krok w wątku z 64 MB stosu przechodzi; naprawa: CLI uruchamia komendy w wątku z dużym stosem (`_call_with_big_stack`), `demo` na CPU | `ruff` czysty, **257 testów** (w tym nowe testy helpera), grupa `pretrained` po naprawie ruszyła bez crashu (PID żyje, GPU aktywne) | trafne; przyczyna środowiskowa, nie zmiana modelu ani budżetu (odstępstwo 53) |
+| 2026-11-22 | 6/8 | **macierz domknięta**: `pretrained` scratch 0,644 / ImageNet 0,698; `eval --split test` na wszystkich 13 runach; `report` z 13 runów → `docs/experiments.md`; `error-analysis` na najlepszym runie (okno 10 s) | `report` exit 0, tabele zgodne z `index.csv`, `ruff` czysty, **259 testów**; najlepszy wynik całości: **CNN okno 10 s — test macro-F1 0,736** (top-3 0,902) | trafne; jeden seed, więc różnice ±0,01 bez rozstrzygnięcia (odstępstwa 54–56) |
 
 ## Odstępstwa od SPEC
 
@@ -266,9 +267,24 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     forward przechodził, więc to nie model, a domyślny 1 MB stos wątku głównego Windows
     w połączeniu z CUDA 13.2. Naprawa: CLI uruchamia komendy (poza `demo`, które musi mieć
     wątek główny) w wątku z `threading.stack_size(64 MB)`; `demo` działa na CPU z definicji
-    (FR-13), co dodatkowo omija problem. Po zmianie: `ruff` czysty, **257 testów**, grupa
+    (FR-13), co dodatkowo omija problem. Po zmianie: `ruff` czysty, **259 testów**, grupa
     `pretrained` ruszyła bez crashu. Wniosek: błąd środowiska, nie logiki; nie zmieniamy
     budżetu ani konfiguracji eksperymentu.
+54. **Macierz domknięta i jej siła wnioskowania.** 13 runów, pełny zbiór, seed 42, 15 epok
+    z early stopping. Test macro-F1: `rnn` 0,704/0,707/0,668, `window` 0,704/0,712/**0,736**,
+    `aug` 0,685/**0,704**/0,661, `pretrained` 0,644/**0,698**, `pool` 0,707/**0,716**.
+    Powtarzalność: te same konfiguracje w różnych grupach (CNN 3 s basic w `rnn`/`aug`/`window`,
+    CRNN-GRU mean w `rnn`/`pool`) dały **identyczne** liczby (0,704; 0,707). Ale to **jeden seed** —
+    różnice ±0,01 (GRU vs CNN, mean vs attention) nie są istotne bez powtórzeń; 3 seeda to
+    rozszerzenie, nie część wersji minimalnej.
+55. **`pretrained`: rozjazd val vs test przy ImageNet.** ImageNet: val 0,641, test 0,698;
+    scratch: val 0,685, test 0,644. Early stopping wybiera model po val, więc dla gałęzi ImageNet
+    val był pesymistyczny (albo szum jednego seeda). **Nie** interpretować tego jako „ImageNet
+    lepiej generalizuje" bez powtórzeń — raport pokazuje obie kolumny, wnioski należą do człowieka.
+56. **`aug full` wypadł poniżej `basic` przy 15 epokach.** 0,661 vs 0,704 (a `none` 0,685).
+    Mixup + SpecAugment zwykle potrzebują dłuższego treningu; przy wspólnym budżecie i early
+    stopping `full` nie zdążył się wyuczyć. To obserwacja o **budżecie**, nie dowód, że pełna
+    augmentacja nie działa — wymagałaby osobnego runu z większą liczbą epok.
 
 ## Wznowienie po przerwie (2026-11-18)
 

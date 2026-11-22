@@ -835,8 +835,14 @@ i zostawia sekcję „Wnioski” człowiekowi. Bramka przeszła: 226 testów, `a
 `torch 2.15.0+cu132` (RTX 5070 12 GB, CUDA 13.2; wcześniej build CPU-only) — patrz dziennik,
 odstępstwo 35. Grupa `window` wymaga cache dla innej geometrii okna: `ablate` tworzy
 `data/window5`/`data/window10` na twardych linkach do `data/raw` i buduje cache na żądanie.
-Wiersze ze `smoke` w `docs/experiments.md` są techniczne, nie są wynikami badania; pełne runy
-macierzy są dokładane po etapie 6 i opisane w dzienniku.
+Wiersze ze `smoke` w `docs/experiments.md` są techniczne, nie są wynikami badania.
+
+**Macierz domknięta (2026-11-22, po etapie 8):** 13 runów na pełnym zbiorze, 15 epok z early
+stopping, seed 42, test macro-F1 na poziomie nagrania: `rnn` 0,704 / 0,707 / 0,668 (CNN / GRU /
+LSTM), `window` 3 s / 5 s / 10 s = 0,704 / 0,712 / **0,736**, `aug` none / basic / full =
+0,685 / **0,704** / 0,661, `pretrained` scratch / ImageNet = 0,644 / **0,698**, `pool` mean /
+attention = 0,707 / **0,716**. Każda grupa ma pełny `runs/ablation_<grupa>.json`, a tabela jest
+w `docs/experiments.md`. To jeden seed — powtórzenia i wnioski należą do człowieka.
 
 **Commit:** `feat(ablation): single-variable experiment matrix` · **Dziennik:** co udało się policzyć, a co wymagało GPU.
 **Stop, jeśli:** pełna macierz nie mieści się w czasie → uruchom `rnn` i `pretrained`, resztę oznacz w README jako nieprzebadaną. Nie wymyślaj wyników.
@@ -914,14 +920,15 @@ git ls-files | grep -E '\.(mp3|wav|flac|ogg)$'   # Windows: git ls-files | Selec
 top-3, spektrogram z oknami, karta modelu, zastrzeżenie) jest gotowe; `--smoke` przechodzi na
 najlepszym runie (`20261121-180015-crnn-rnn-crnn-gru-s42`, device=cpu). README ma 11 sekcji,
 tabelę licencji i przykładową atrybucję nagrań (pełna lista w `data/catalog.jsonl`), sekcję
-ograniczeń z notą o grupach w toku. `docs/experiments.md` jest generowane z `index.csv` i zawiera
-**prawdziwe** wyniki grupy `rnn` na pełnym zbiorze (test macro-F1: CNN 0,704, CRNN-GRU 0,707,
-CRNN-LSTM 0,668; top-3: 0,883/0,912/0,906; 307 nagrań, 11 020 okien) oraz F1 per gatunek dla
-4 par mylących. Bramka: `ruff` czysty, **257 testów**, `demo --smoke` exit 0, brak audio/sekretów
-w repo. **Otwarte:** macierz ablacji domyka się po etapie 8 — grupa `pretrained` przerwała się
-awarią CUDA (`0xC0000409`, do powtórzenia), `aug`/`pool`/`window` w toku; zbiór własny
-(`eval --split own`) nadal wymaga nagrań człowieka; wnioski w `experiments.md` pisze człowiek.
-Szczegóły w `docs/ai-journal.md` (odstępstwa 48–51).
+ograniczeń. `docs/experiments.md` jest generowane z `index.csv`. Bramka: `ruff` czysty,
+**259 testów**, `demo --smoke` exit 0, brak audio/sekretów w repo.
+
+**Macierz domknięta (2026-11-22):** 5 grup × 13 runów na pełnym zbiorze (test macro-F1:
+najlepszy **okno 10 s 0,736**, CRNN-GRU 0,707, pool attention 0,716, ImageNet 0,698 vs
+scratch 0,644, aug full 0,661 poniżej basic 0,704). Wszystkie liczby w `docs/experiments.md`
+i `runs/ablation_*.json`. **Otwarte:** zbiór własny (`eval --split own`) wymaga nagrań
+człowieka, wnioski w `experiments.md` pisze człowiek, a macierz to jeden seed (3 seeda to
+rozszerzenie). Szczegóły: dziennik, odstępstwa 48–56.
 
 **Commit:** `docs: readme, demo and final quality pass` · **Dziennik:** co zostało niezbadane i dlaczego.
 **Stop, jeśli:** Gradio nie instaluje się w środowisku → zgłoś i wystaw fallback `predict --file`; nie usuwaj demo z zakresu bez zgody człowieka.

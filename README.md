@@ -5,10 +5,10 @@ Projekt badawczy (studia AI), pytanie: **ile daje modelowanie czasu w porównani
 który patrzy na spektrogram okna bez rekurencji?**
 
 > **Status: wersja minimalna ukończona — etapy 1–8** (patrz `project info/SPEC.md` §15).
-> Dane, cache, cztery rodziny modeli, macierz ablacji, ewaluacja, analiza błędów, generator tabeli
-> i demo są gotowe. Pełna macierz ablacji domyka się **po** etapie 8: grupa `rnn` ma już wyniki
-> na całym zbiorze, `pretrained` przerwała awaria CUDA (do powtórzenia), `aug`/`pool`/`window`
-> są w toku. Zbiór własny i wnioski w `docs/experiments.md` pozostają po stronie człowieka.
+> Dane, cache, cztery rodziny modeli, **pełna macierz ablacji (5 grup, 13 runów na całym zbiorze)**,
+> ewaluacja, analiza błędów, generator tabeli i demo są gotowe. Najlepszy wynik: CNN z oknem 10 s
+> (test macro-F1 0,736). Otwarte pozostają tylko rzeczy ludzi: zbiór własny nagrań, wnioski
+> w `docs/experiments.md` i ewentualne powtórzenia na 3 seedach.
 
 > **Nowy w projekcie?** Zacznij od [`docs/przewodnik.md`](docs/przewodnik.md) — prosty słownik
 > terminów i wyjaśnienie, jak wszystko się łączy, bez żargonu.
@@ -156,19 +156,24 @@ Tabela w [`docs/experiments.md`](docs/experiments.md) jest generowana z `runs/in
 i wzbogacana o F1 per gatunek dla 4 par mylących (`eval_test/per_class.csv`) oraz o tabelę
 test vs zbiór własny (`eval_own`). Wnioski badawcze dopisuje człowiek w sekcji 5 pliku.
 
-**Grupa `rnn` na pełnym zbiorze** (307 nagrań testowych, 11 020 okien, seed 42, wspólny split,
-15 epok z early stopping; test macro-F1 na poziomie nagrania):
+**Pełna macierz ablacji** — 5 grup × 13 runów na całym zbiorze (seed 42, wspólny split,
+15 epok z early stopping; test macro-F1 na poziomie nagrania, 307 nagrań testowych):
 
-| model | okno | aug | val macro-F1 | test macro-F1 | test top-3 |
-|---|---|---|---|---|---|
-| CNN (bez rekurencji) | 3 s | basic | 0,686 | **0,704** | 0,883 |
-| CRNN-GRU | 3 s | basic | 0,722 | **0,707** | 0,912 |
-| CRNN-LSTM | 3 s | basic | 0,707 | **0,668** | 0,906 |
+| grupa | porównanie | test macro-F1 | uwaga |
+|---|---|---|---|
+| `rnn` | CNN / CRNN-GRU / CRNN-LSTM | 0,704 / 0,707 / 0,668 | GRU vs CNN **+0,003** = szum jednego seeda |
+| `window` | 3 s / 5 s / 10 s | 0,704 / 0,712 / **0,736** | dłuższe okno pomaga (mniej okien: 32 918 vs 95 898) |
+| `aug` | none / basic / full | 0,685 / **0,704** / 0,661 | `full` (mixup+SpecAugment) przy 15 epokach nie pomaga |
+| `pretrained` | scratch / ImageNet | 0,644 / **0,698** | transfer +0,054, ale wciąż poniżej CNN/CRNN |
+| `pool` | mean / attention | 0,707 / **0,716** | attention +0,009 = szum jednego seeda |
 
-Różnica CNN vs CRNN-GRU to **+0,003** test macro-F1 — w granicach szumu jednego seeda, więc
-**nie ma podstaw, by ogłosić przewagę rekurencji**; to wstępne liczby, a wnioski i ewentualne
-3 seeda należą do człowieka. Pełna macierz (`pretrained`, `aug`, `pool`, `window`) domyka się po
-etapie 8; każdy run zapisuje `config.yaml`, seed, urządzenie i `git_sha`.
+**Najlepszy wynik całości:** CNN z oknem **10 s** — test macro-F1 **0,736**, top-1 0,772,
+top-3 0,902. Trzy konfiguracje występują w dwóch grupach (np. CNN 3 s basic w `rnn`, `aug`
+i `window`) i dały identyczne liczby, co potwierdza powtarzalność runów na GPU.
+
+Różnica CNN vs CRNN-GRU (+0,003) i mean vs attention (+0,009) jest w granicach szumu **jednego
+seeda**, więc nie ma podstaw ogłaszać przewagi rekurencji ani attention; 3 seeda i wnioski należą
+do człowieka. Każdy run zapisuje `config.yaml`, seed, urządzenie i `git_sha`.
 
 Zbiór własny (`data/own/<gatunek>/`, sekcja `own`) to zadanie człowieka — bez niego raport jawnie
 pokazuje brak danych, a nie wyniki podstawione.
@@ -181,7 +186,7 @@ ruff check .
 pytest --cov=bird_recognizer.eval --cov-report=term-missing   # bramka pokrycia etapu 7
 ```
 
-Stan: **257 testów**; pokrycie całości ~91% (`eval/` 96%, `models/` 83–100%, `train/` 93–100%,
+Stan: **259 testów**; pokrycie całości ~91% (`eval/` 96%, `models/` 83–100%, `train/` 93–100%,
 `ablation.py` 90%, `data/` 88–100%, `xc/` 90–94%). Zakres: konfiguracja, redakcja sekretów,
 blokada sieci, klient API, katalog, pobieranie, podział i wyciek, audio, okna, log-mel, cache,
 modele (CNN, CRNN, transfer), augmentacje (basic i full), pętla treningu, metryki (macro-F1,
@@ -218,9 +223,8 @@ Pełne drzewo: `project info/SPEC.md` §5. Dane (`data/`) i wyniki (`runs/`) są
 - Własne nagrania z telefonu to inna domena (tło miasta, odległość) — spadek jakości jest
   oczekiwany i raportowany osobno. **Zbioru własnego jeszcze nie ma**, więc sekcja `own`
   w raporcie jest pusta (nie podstawiamy w zamian żadnych danych).
-- **Nieprzebadane grupy ablacji:** wyniki w tabeli dotyczą grupy `rnn` (pełny zbiór). Grupa
-  `pretrained` przerwała się awarią CUDA (`0xC0000409`) i wymaga powtórzenia; `aug`, `pool`
-  i `window` są w toku. Nie wolno ich prezentować jako zbadanych, dopóki nie ma runów.
+- **Macierz ablacji to jeden seed** (42). Różnice rzędu ±0,01 (CNN vs CRNN-GRU, mean vs attention)
+  nie są istotne statystycznie; 3 seeda to rozszerzenie, nie część wersji minimalnej.
 - Trening na GPU bywa niedeterministyczny mimo seeda; raportujemy urządzenie przy każdym runie.
 - Grupy nagrywających są bardzo nierówne (jeden nagrywający = setki plików), więc train zbiera
   kilku najpłodniejszych, a val/test — dziesiątki mniejszych; podział jest deterministyczny

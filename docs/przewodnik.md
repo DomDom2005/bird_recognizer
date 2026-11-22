@@ -206,7 +206,7 @@ mylących i zbioru własnego — z plików `eval_test`/`eval_own`. Dlatego nie e
 
 **Demo ↔ run.** `demo --run <id>` bierze model z tego konkretnego runu i pokazuje jego top-3.
 
-## 7. Gdzie jesteśmy (stan 2026-11-21)
+## 7. Gdzie jesteśmy (stan 2026-11-22)
 
 | Etap | Co daje | Stan |
 |---|---|---|
@@ -215,17 +215,23 @@ mylących i zbioru własnego — z plików `eval_test`/`eval_own`. Dlatego nie e
 | 3 | cache spektrogramów (2897 nagrań) | ✅ |
 | 4 | baseline MFCC+SVM i mały CNN | ✅ |
 | 5 | transfer (ResNet18) i CRNN | ✅ |
-| 6 | macierz ablacji + generator tabeli | ✅ (kod), pełne runy w toku |
+| 6 | macierz ablacji + generator tabeli | ✅ 5 grup, 13 runów na pełnym zbiorze |
 | 7 | ewaluacja, agregacja, analiza błędów | ✅ |
-| 8 | demo, raport, domknięcie | 🔄 demo gotowe, raport w toku |
+| 8 | demo, raport, domknięcie | ✅ |
 | 9 | rozszerzenia (opcjonalne, np. aplikacja) | ⏸ decyzja D12 |
 
 **Stałe liczby:** 2917 nagrań w katalogu, 2897 z cache (20 odrzuconych: 19 cisza, 1 błąd
 dekodowania; **0 w teście**), 131 900 okien, 6,06 GB cache, 12 gatunków, 4 pary mylące.
 Sprzęt: RTX 5070 12 GB, `torch 2.15.0+cu132`; pełna epoka CNN na całym zbiorze ≈ 130 s.
 
-**Co się teraz dzieje:** w tle liczy się pełna macierz ablacji (5 grup, po 15 epok z early stopping).
-To potrwa kilka godzin. Dopiero po niej `docs/experiments.md` będzie zawierać **prawdziwe wyniki**.
+**Najlepszy wynik:** CNN z oknem **10 s** — test macro-F1 **0,736** (top-3 0,902). Pełna tabela
+pięciu grup jest w `docs/experiments.md`, a sekcje „Wnioski” i zbiór własny zostają dla człowieka.
+Macierz to **jeden seed** — różnice ±0,01 nie są rozstrzygające bez powtórzeń.
+
+**Co się teraz dzieje:** macierz jest domknięta — 13 runów na pełnym zbiorze, `docs/experiments.md`
+zawiera prawdziwe wyniki (nie smoke). Otwarte pozostają tylko rzeczy ludzi: zbiór własny nagrań,
+wnioski w raporcie i ewentualne powtórzenia na 3 seedach. Opcjonalnie można zacząć aplikację
+(`project info/APP_SPEC.md`, etapy APP-1…APP-5).
 
 ## 8. Co jest wynikiem, a co tylko testem (bardzo ważne)
 
