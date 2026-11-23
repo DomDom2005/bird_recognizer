@@ -294,6 +294,9 @@ dokumentację i demo.
 
 ## 14. Słowniczek (dla autora)
 
+> **Pełny słownik każdego terminu z tego dokumentu:** [`slownik-opis-projektu.md`](slownik-opis-projektu.md)
+> — definicja, „W projekcie:” i wzory metryk. Poniżej szybka ściąga najważniejszych haseł.
+
 | Termin | Prościej |
 |---|---|
 | **log-mel / spektrogram** | obrazek dźwięku: czas × wysokość tonu × głośność |

@@ -14,7 +14,8 @@ który patrzy na spektrogram okna bez rekurencji?**
 > terminów i wyjaśnienie, jak wszystko się łączy, bez żargonu.
 
 > **Opis dla wykładowcy** (pełne szczegóły techniczne + ramki „Prościej”):
-> [`docs/opis-projektu.md`](docs/opis-projektu.md).
+> [`docs/opis-projektu.md`](docs/opis-projektu.md) · **słownik każdego terminu technicznego**:
+> [`docs/slownik-opis-projektu.md`](docs/slownik-opis-projektu.md).
 
 > **Aplikacja (nagraj/wgraj + próg „nie wiem")** jest opisana w osobnym dokumencie:
 > [`project info/APP_SPEC.md`](project%20info/APP_SPEC.md) (wariant A+B, etapy APP-1…APP-5).
