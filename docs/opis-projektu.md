@@ -203,6 +203,8 @@ nagrania z metadanymi (`q`, `type`, `also`, `rmk`, liczba okien, udział odrzuco
   najmocniejsze: piecuszek 0,938, dzwoniec 0,867, zięba 0,866. Macro-F1 zaniżają małe klasy.
 - **Pary mylące (błędy):** bogatka→modra, rudzik→modra, pierwiosnek→bogatka/szczygieł/rudzik;
   3/10 najgorszych nagrań ma niepuste `also` (podejrzenie szumu etykiet).
+- **Dane i wyniki per gatunek:** [`gatunki-dane-i-wyniki.md`](gatunki-dane-i-wyniki.md)
+  (ile nagrań, okien i minut ma każdy gatunek oraz F1/P/R per gatunek i rozrzut po runach).
 
 > **Prościej:** najlepiej wypada model bez RNN, ale z **dłuższym oknem** (10 s) i z wstępnym
 > uczeniem na ImageNet. RNN nie zaszkodził, ale nie pomógł bardziej niż losowość. Wynik 0,74
