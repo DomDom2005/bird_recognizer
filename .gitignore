@@ -25,6 +25,7 @@ htmlcov/
 # Artefakty modeli i audio (licencje CC — SPEC §4.2)
 *.db
 *.pt
+!artifacts/demo-model/best.pt
 *.pth
 *.npy
 *.joblib

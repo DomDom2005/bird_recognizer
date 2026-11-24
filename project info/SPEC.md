@@ -519,8 +519,9 @@ Struktura: problem i pytanie badawcze → dane (źródło, licencje, liczebnoś�
 - Klucz API **wyłącznie** w zmiennej `BIRD_XC_API_KEY` / `.env` poza repo. W repo tylko `.env.example` z nazwami zmiennych. Kod akceptuje też starszy alias `xc_api_key` (tak nazywa się zmienna w istniejącym `.env` właściciela); pierwszeństwo ma `BIRD_XC_API_KEY`.
 - Klucz xeno-canto jest **osobisty i odwoływalny**; dokumentacja wprost ostrzega, że wyciek kończy się odebraniem klucza. Dlatego: nie wklejaj go do testów, fixture'ów, zrzutów ekranu, logów ani URL-i w README.
 - Klucz jedzie w query stringu → **każdy log URL-a musi przechodzić przez redakcję** (`key=***`). Filtruj też `Authorization`, `token`, `api_key`.
-- `.gitignore`: `.env`, `data/`, `runs/`, `*.db`, `*.pt`, `*.npy`, `*.mp3`, `*.wav`, `*.flac`, `*.ogg`.
+- `.gitignore`: `.env`, `data/`, `runs/`, `*.db`, `*.pt` (wyjątek: `!artifacts/demo-model/best.pt`), `*.npy`, `*.mp3`, `*.wav`, `*.flac`, `*.ogg`.
 - **Nagrania nie są commitowane** — powody licencyjne (sekcja 4.2). W repo może być tylko malutki, wygenerowany plik syntetyczny (do testów demo).
+- **Jeden mały checkpoint demo jest commitowany** (`artifacts/demo-model/best.pt`, 1,6 MB) — decyzja 2026-11-24: po sklonowaniu repo `bird_recognizer demo` działa bez treningu i bez danych. Pochodzenie (run `20261121-225300-cnn-window-10s-s42`, test macro-F1 0,736), licencja danych (xeno-canto, użycie niekomercyjne) i zastrzeżenia są w `artifacts/demo-model/README.md`. Pozostałe modele (ResNet18 itd.) zostają poza repo.
 - Nie loguj pełnych ciał odpowiedzi błędów bez przycięcia (max ~500 znaków).
 - Skan sekretów: `gitleaks` jako opcjonalny pre-commit; przed commitem sprawdź, czy `data/` i `runs/` nie są w indeksie.
 

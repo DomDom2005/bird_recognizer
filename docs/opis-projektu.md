@@ -238,7 +238,8 @@ python -m bird_recognizer.cli demo --run <id>
 Artefakty runu: `runs/<run_id>/{config.yaml, env.txt, metrics.json, metrics.jsonl, best.pt}`;
 jeden wiersz w `runs/index.csv`; `env.txt` ma wersje bibliotek, `git_sha`, liczbę parametrów
 i urządzenie. Dane i wyniki są **poza repo** (rozmiar + licencje); repo zawiera kod, konfigurację,
-dokumentację i demo.
+dokumentację i demo. Wyjątek: **jeden wbudowany checkpoint demo** (`artifacts/demo-model`, 1,6 MB)
+— dzięki niemu po sklonowaniu repo `bird_recognizer demo` działa bez danych i treningu.
 
 > **Prościej:** żeby powtórzyć wynik, potrzebujesz tego samego configu, seeda, kodu (commit)
 > i danych. Wszystko to jest zapisane w katalogu runu — bez tego liczba w tabeli byłaby

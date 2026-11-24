@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from bird_recognizer.cli import main
 from bird_recognizer.config import load_config
 from bird_recognizer.eval import evaluate as evaluate_module
 from support import make_catalog_with_audio, write_wav
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _argv(tmp_dir: Path, *rest: str) -> list[str]:
@@ -90,3 +93,19 @@ def test_cli_demo_smoke_prints_top3(tmp_dir: Path, capsys) -> None:
     assert "Demo smoke" in output
     assert "plik syntetyczny" in output
     assert "UWAGA" in output
+
+
+def test_bundled_demo_model_is_complete() -> None:
+    root = REPO_ROOT / "artifacts" / "demo-model"
+    for name in ("best.pt", "config.yaml", "metrics.json", "README.md"):
+        assert (root / name).is_file(), name
+    metrics = json.loads((root / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["model"] == "cnn"
+    assert 0.70 <= metrics["test"]["recording_macro_f1"] <= 0.77
+
+
+def test_cli_demo_uses_bundled_model_by_default(tmp_dir: Path, capsys) -> None:
+    assert main(_argv(tmp_dir, "demo", "--smoke")) == 0
+    output = capsys.readouterr().out
+    assert "Demo smoke" in output
+    assert "device=cpu" in output

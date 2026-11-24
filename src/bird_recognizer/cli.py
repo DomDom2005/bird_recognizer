@@ -45,6 +45,23 @@ LOGGER = logging.getLogger(__name__)
 #: SVM is O(n^2); cap the training set so a full run stays practical on CPU.
 MAX_SVM_TRAIN_WINDOWS = 20_000
 SMOKE_LIMIT_PER_SPECIES = 2
+#: Small committed checkpoint so the demo works after a fresh clone (no training).
+BUNDLED_DEMO_RUN = Path("artifacts") / "demo-model"
+
+
+def _bundled_demo_run() -> Path:
+    """Locate the committed demo model from cwd or from the source checkout."""
+    candidates = [
+        BUNDLED_DEMO_RUN,
+        Path(__file__).resolve().parents[2] / BUNDLED_DEMO_RUN,
+    ]
+    for candidate in candidates:
+        if (candidate / "best.pt").is_file():
+            return candidate
+    raise DataError(
+        "brak wbudowanego modelu demo (artifacts/demo-model) — "
+        "podaj --run <run_id> albo sklonuj repo z artefaktem"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -195,7 +212,11 @@ def build_parser() -> argparse.ArgumentParser:
     errors.add_argument("--top", type=int, default=10, help="ile par pomyłek pokazać")
 
     demo = sub.add_parser("demo", help="demo Gradio: plik → top-3 gatunki")
-    demo.add_argument("--run", required=True)
+    demo.add_argument(
+        "--run",
+        default=None,
+        help="run_id albo ścieżka katalogu runu (domyślnie wbudowany artifacts/demo-model)",
+    )
     demo.add_argument("--port", type=int, default=7860)
     demo.add_argument(
         "--smoke",
@@ -988,7 +1009,8 @@ def _cmd_demo(config: Config, args: argparse.Namespace) -> int:
     # Demo is a CPU application by design (SPEC FR-13); forcing CPU also avoids the
     # CUDA 13.2 cuBLASLt stack overflow in the Gradio server threads (journal 53).
     device = torch.device(args.device) if args.device else torch.device("cpu")
-    bundle = evaluate_module.load_run(config, args.run, device=device)
+    run = args.run if args.run else _bundled_demo_run()
+    bundle = evaluate_module.load_run(config, run, device=device)
     if args.smoke:
         return demo_module.smoke_check(bundle)
     print(f"Demo: run {bundle.run_id}, model {bundle.model_name}, device {device}")

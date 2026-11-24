@@ -146,7 +146,7 @@ krzywą `coverage vs accuracy` i zapisuje `runs/<run>/calibration.json`:
 ## 5. Konfiguracja `configs/app.yaml`
 
 ```yaml
-run: ""                 # domyślny run; puste = najlepszy z runs/index.csv (bez smoke)
+run: ""                 # domyślny run; puste = wbudowany artifacts/demo-model, potem najlepszy z runs/index.csv
 threshold: null         # null = wczytaj default_threshold z calibration.json
 top_k: 3
 max_seconds: 60         # dłuższe pliki są przycinane do pierwszych N sekund
