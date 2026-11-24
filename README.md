@@ -72,20 +72,23 @@ Klucz API: skopiuj `.env.example` do `.env` i wpisz klucz xeno-canto. Kod czyta
 
 ### Szybki start: aplikacja bez danych i bez treningu
 
-Po sklonowaniu repo wbudowany model (`artifacts/demo-model`, 1,6 MB) wystarcza do uruchomienia
-demo — **nie trzeba pobierać xeno-canto, budować cache ani trenować**:
+Po sklonowaniu repo dwa wbudowane modele (`artifacts/demo-model` — 1,6 MB i
+`artifacts/demo-model-crnn` — 4,9 MB) wystarczają do uruchomienia demo — **nie trzeba pobierać
+xeno-canto, budować cache ani trenować**:
 
 ```bash
 git clone https://github.com/DomDom2005/bird_recognizer.git
 cd bird_recognizer
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu132
-python -m bird_recognizer.cli demo           # http://127.0.0.1:7860
+python -m bird_recognizer.cli demo           # http://127.0.0.1:7860, wybór modelu w UI
 python -m bird_recognizer.cli demo --smoke   # bez serwera: test na tonie syntetycznym
 ```
 
-Demo działa na CPU, nie potrzebuje `.env` ani sieci. Model: CNN z oknem 10 s, run
-`20261121-225300-cnn-window-10s-s42`, test macro-F1 0,736; pochodzenie i licencja (xeno-canto,
-użycie niekomercyjne) w [`artifacts/demo-model/README.md`](artifacts/demo-model/README.md).
+Demo działa na CPU, nie potrzebuje `.env` ani sieci. W UI wybierasz model: **CNN, okno 10 s**
+(test macro-F1 0,736, run `20261121-225300-cnn-window-10s-s42`) albo **CRNN-GRU, okno 3 s**
+(0,707, run `20261121-180015-crnn-rnn-crnn-gru-s42`). Pochodzenie i licencja (xeno-canto,
+użycie niekomercyjne): [`artifacts/demo-model/README.md`](artifacts/demo-model/README.md)
+i [`artifacts/demo-model-crnn/README.md`](artifacts/demo-model-crnn/README.md).
 
 Sprawdzenie konfiguracji bez sieci:
 
@@ -268,10 +271,11 @@ Pełne drzewo: `project info/SPEC.md` §5. Dane (`data/`) i wyniki (`runs/`) są
 
 - Klucz API tylko w `.env` (poza repo). Klucz jedzie w query stringu, więc logi maskują `key=...`.
 - Nagrania i duże modele nie są commitowane; repo zawiera kod, konfigurację, dokumentację
-  oraz **jeden mały checkpoint demo** (`artifacts/demo-model`, 1,6 MB), żeby aplikacja działała
-  po sklonowaniu bez treningu i bez danych. Pochodzenie i licencja:
-  [`artifacts/demo-model/README.md`](artifacts/demo-model/README.md) (model z danych xeno-canto,
-  użycie niekomercyjne).
+  oraz **dwa małe checkpointy demo** (`artifacts/demo-model` — CNN 1,6 MB i
+  `artifacts/demo-model-crnn` — CRNN 4,9 MB), żeby aplikacja działała po sklonowaniu bez
+  treningu i bez danych. Pochodzenie i licencja: [`artifacts/demo-model/README.md`](artifacts/demo-model/README.md)
+  i [`artifacts/demo-model-crnn/README.md`](artifacts/demo-model-crnn/README.md) (modele z danych
+  xeno-canto, użycie niekomercyjne).
 
 **Atrybucja nagrań.** Pełna lista (`id`, `rec`, `lic`, link `https://xeno-canto.org/<id>`) jest
 w `data/catalog.jsonl`; poniżej rozkład licencji dla 2917 nagrań z katalogu (stan 2026-11-21):

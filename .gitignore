@@ -26,6 +26,7 @@ htmlcov/
 *.db
 *.pt
 !artifacts/demo-model/best.pt
+!artifacts/demo-model-crnn/best.pt
 *.pth
 *.npy
 *.joblib

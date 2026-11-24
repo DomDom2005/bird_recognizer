@@ -1,0 +1,100 @@
+api:
+  base_url: https://xeno-canto.org/api/3/recordings
+  connect_timeout_s: 10.0
+  country: poland
+  download_timeout_s: 300.0
+  max_retries: 5
+  per_page: 100
+  quality: '">C"'
+  read_timeout_s: 60.0
+  request_interval_s: 1.0
+  status: ''
+audio:
+  highpass_hz: 100.0
+  highpass_order: 4
+  hop_s: 1.5
+  sample_rate: 32000
+  window_s: 3.0
+augment:
+  freq_mask_width: 16
+  freq_masks: 2
+  gain_db: 3.0
+  mixup_alpha: 0.4
+  noise_snr_max: 20.0
+  noise_snr_min: 5.0
+  preset: basic
+  shift_s: 1.0
+  time_mask_width: 20
+  time_masks: 2
+config_path: configs\default.yaml
+gating:
+  abs_floor: 0.001
+  percentile: 90.0
+  rel_floor: 0.1
+paths:
+  data_dir: data
+  runs_dir: runs
+seed: 42
+species:
+- latin: Passer domesticus
+  pair: wrobel-mazurek
+  pl: wróbel
+- latin: Passer montanus
+  pair: wrobel-mazurek
+  pl: mazurek
+- latin: Parus major
+  pair: bogatka-modra
+  pl: bogatka
+- latin: Cyanistes caeruleus
+  pair: bogatka-modra
+  pl: modra
+- latin: Turdus merula
+  pair: kos-kwiczol
+  pl: kos
+- latin: Turdus philomelos
+  pair: kos-kwiczol
+  pl: kwiczoł
+- latin: Phylloscopus collybita
+  pair: pierwiosnek-piecuszek
+  pl: pierwiosnek
+- latin: Phylloscopus trochilus
+  pair: pierwiosnek-piecuszek
+  pl: piecuszek
+- latin: Erithacus rubecula
+  pair: null
+  pl: rudzik
+- latin: Fringilla coelebs
+  pair: null
+  pl: zięba
+- latin: Carduelis carduelis
+  pair: null
+  pl: szczygieł
+- latin: Chloris chloris
+  pair: null
+  pl: dzwoniec
+spectrogram:
+  fmax: 15000.0
+  fmin: 150.0
+  hop_length: 512
+  n_fft: 1024
+  n_mels: 128
+  normalise: true
+  power: 2.0
+  top_db: 80.0
+  win_length: 1024
+training:
+  batch_size: 32
+  class_weight: balanced
+  early_stopping_min_delta: 0.001
+  early_stopping_patience: 8
+  epochs: 15
+  epochs_finetune: 20
+  grad_clip: 5.0
+  label_smoothing: 0.0
+  lr: 0.001
+  lr_finetune: 0.0003
+  num_workers: 0
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 1
+  weight_decay: 0.0001

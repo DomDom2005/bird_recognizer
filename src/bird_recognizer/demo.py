@@ -104,6 +104,21 @@ def model_card(bundle: RunBundle) -> str:
     )
 
 
+def model_label(bundle: RunBundle) -> str:
+    """Human label for the model selector: name, window and test score."""
+    name = bundle.model_name.upper()
+    if bundle.model_name == "crnn":
+        name = f"CRNN-{str(bundle.options.get('rnn', 'gru')).upper()}"
+    score = ""
+    metrics_file = bundle.directory / "metrics.json"
+    if metrics_file.is_file():
+        metrics = json.loads(metrics_file.read_text(encoding="utf-8"))
+        value = (metrics.get("test") or {}).get("recording_macro_f1")
+        if value is not None:
+            score = f" — test macro-F1 {value:.3f}".replace(".", ",")
+    return f"{name}, okno {bundle.config.audio.window_s:g} s{score}"
+
+
 def predict_for_ui(bundle: RunBundle, path: str | None):
     """Gradio callback: never raises — returns a readable message instead."""
     if not path:
@@ -116,18 +131,25 @@ def predict_for_ui(bundle: RunBundle, path: str | None):
     return {name: probability for name, probability in top}, figure, model_card(bundle)
 
 
-def build_app(bundle: RunBundle):
-    """Build (but do not launch) the Gradio Blocks app."""
+def build_app(bundles: dict[str, RunBundle]):
+    """Build (but do not launch) the Gradio Blocks app for one or more models."""
     # Gradio pings analytics endpoints on launch; the demo must stay offline (FR-13).
     os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
     import gradio as gr
+
+    names = list(bundles)
+    first = bundles[names[0]]
+
+    def run(path: str | None, name: str):
+        return predict_for_ui(bundles.get(name, first), path)
 
     with gr.Blocks(title="bird_recognizer") as app:
         gr.Markdown(
             "# bird_recognizer — demo\n"
             "Nagraj ptaka mikrofonem albo wgraj plik; model zwraca top-3 gatunki "
-            "i spektrogram z oknami."
+            "i spektrogram z oknami. Wybierz model, żeby porównać CNN z CRNN."
         )
+        model_choice = gr.Radio(choices=names, value=names[0], label="Model")
         audio = gr.Audio(
             sources=["microphone", "upload"],
             type="filepath",
@@ -136,17 +158,18 @@ def build_app(bundle: RunBundle):
         with gr.Row():
             label = gr.Label(num_top_classes=3, label="Top-3 gatunki")
             plot = gr.Plot(label="Spektrogram")
-        info = gr.Markdown(model_card(bundle))
-        audio.change(
-            fn=lambda path: predict_for_ui(bundle, path),
-            inputs=audio,
-            outputs=[label, plot, info],
+        info = gr.Markdown(model_card(first))
+        audio.change(fn=run, inputs=[audio, model_choice], outputs=[label, plot, info])
+        model_choice.change(
+            fn=lambda name: model_card(bundles.get(name, first)),
+            inputs=model_choice,
+            outputs=info,
         )
     return app
 
 
-def launch(bundle: RunBundle, *, port: int = 7860) -> None:
-    app = build_app(bundle)
+def launch(bundles: dict[str, RunBundle], *, port: int = 7860) -> None:
+    app = build_app(bundles)
     app.launch(server_port=port, show_error=True)
 
 

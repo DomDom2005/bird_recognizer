@@ -1,12 +1,16 @@
-# Wbudowany model demo
+# Wbudowane modele demo
 
-Ten katalog zawiera **jeden mały checkpoint** (1,6 MB), żeby po sklonowaniu repo można było
-uruchomić demo bez trenowania i bez pobierania danych:
+Ten katalog zawiera **mały checkpoint CNN** (1,6 MB); obok leży drugi model, **CRNN-GRU**
+(`../demo-model-crnn`, 4,9 MB). Razem pozwalają uruchomić demo po sklonowaniu repo — bez
+trenowania, bez pobierania danych i bez `.env`:
 
 ```bash
-python -m bird_recognizer.cli demo            # używa artifacts/demo-model
-python -m bird_recognizer.cli demo --smoke    # test ścieżki na tonie syntetycznym
+python -m bird_recognizer.cli demo            # oba modele, wybór w UI
+python -m bird_recognizer.cli demo --smoke    # test ścieżki na tonie syntetycznym (CNN)
 ```
+
+W UI modele są opisane jako „CNN, okno 10 s — test macro-F1 0,736” i
+„CRNN-GRU, okno 3 s — test macro-F1 0,707”; domyślnie wybrany jest CNN.
 
 ## Skąd to jest
 
@@ -19,14 +23,15 @@ python -m bird_recognizer.cli demo --smoke    # test ścieżki na tonie syntetyc
 | Pliki | `best.pt` (wagi), `config.yaml` (geometria 10 s), `metrics.json` (metryki) |
 
 Run powstał w pełnej macierzy ablacji (`docs/experiments.md`); to najlepszy wynik całości.
+Drugi model (CRNN-GRU) opisany jest w [`../demo-model-crnn/README.md`](../demo-model-crnn/README.md).
 
 ## Licencja i uczciwe zastrzeżenie
 
-- Model wytrenowano na nagraniach z **xeno-canto** (głównie CC BY-NC-SA/ND; użycie
+- Oba modele wytrenowano na nagraniach z **xeno-canto** (głównie CC BY-NC-SA/ND; użycie
   **niekomercyjne**). W repo **nie ma audio** — to wyłącznie wagi i konfiguracja.
-- Jeśli korzystasz z modelu publicznie, podaj źródło danych (xeno-canto + nagrywający)
-  i nie używaj go komercyjnie.
+- Jeśli korzystasz z modeli publicznie, podaj źródło danych (xeno-canto + nagrywający)
+  i nie używaj ich komercyjnie.
 - To **artefakt badawczy**, nie produkt: 12 gatunków, Polska, mikrofony kierunkowe;
   dla nagrań z telefonu jakość nie została zmierzona. Brak gwarancji i odpowiedzialności.
-- Plik `best.pt` jest wyjątkiem od reguły „modele poza repo” (świadoma decyzja: 1,6 MB,
+- Pliki `best.pt` są wyjątkiem od reguły „modele poza repo” (świadoma decyzja: 1,6 MB + 4,9 MB,
   żeby demo działało po klonie). Duże checkpointy (ResNet18 itd.) nadal zostają w `runs/`.

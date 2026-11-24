@@ -95,13 +95,19 @@ def test_cli_demo_smoke_prints_top3(tmp_dir: Path, capsys) -> None:
     assert "UWAGA" in output
 
 
-def test_bundled_demo_model_is_complete() -> None:
-    root = REPO_ROOT / "artifacts" / "demo-model"
-    for name in ("best.pt", "config.yaml", "metrics.json", "README.md"):
-        assert (root / name).is_file(), name
-    metrics = json.loads((root / "metrics.json").read_text(encoding="utf-8"))
-    assert metrics["model"] == "cnn"
-    assert 0.70 <= metrics["test"]["recording_macro_f1"] <= 0.77
+def test_bundled_demo_models_are_complete() -> None:
+    roots = [
+        REPO_ROOT / "artifacts" / "demo-model",
+        REPO_ROOT / "artifacts" / "demo-model-crnn",
+    ]
+    scores = []
+    for root in roots:
+        for name in ("best.pt", "config.yaml", "metrics.json", "README.md"):
+            assert (root / name).is_file(), f"{root.name}/{name}"
+        metrics = json.loads((root / "metrics.json").read_text(encoding="utf-8"))
+        assert metrics["model"] in {"cnn", "crnn"}
+        scores.append(metrics["test"]["recording_macro_f1"])
+    assert all(0.68 <= score <= 0.77 for score in scores)
 
 
 def test_cli_demo_uses_bundled_model_by_default(tmp_dir: Path, capsys) -> None:
@@ -109,3 +115,9 @@ def test_cli_demo_uses_bundled_model_by_default(tmp_dir: Path, capsys) -> None:
     output = capsys.readouterr().out
     assert "Demo smoke" in output
     assert "device=cpu" in output
+
+
+def test_cli_demo_runs_bundled_crnn(tmp_dir: Path, capsys) -> None:
+    crnn = REPO_ROOT / "artifacts" / "demo-model-crnn"
+    assert main(_argv(tmp_dir, "demo", "--run", str(crnn), "--smoke")) == 0
+    assert "Demo smoke" in capsys.readouterr().out

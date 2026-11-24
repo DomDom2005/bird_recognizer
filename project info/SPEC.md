@@ -521,7 +521,7 @@ Struktura: problem i pytanie badawcze → dane (źródło, licencje, liczebnoś�
 - Klucz jedzie w query stringu → **każdy log URL-a musi przechodzić przez redakcję** (`key=***`). Filtruj też `Authorization`, `token`, `api_key`.
 - `.gitignore`: `.env`, `data/`, `runs/`, `*.db`, `*.pt` (wyjątek: `!artifacts/demo-model/best.pt`), `*.npy`, `*.mp3`, `*.wav`, `*.flac`, `*.ogg`.
 - **Nagrania nie są commitowane** — powody licencyjne (sekcja 4.2). W repo może być tylko malutki, wygenerowany plik syntetyczny (do testów demo).
-- **Jeden mały checkpoint demo jest commitowany** (`artifacts/demo-model/best.pt`, 1,6 MB) — decyzja 2026-11-24: po sklonowaniu repo `bird_recognizer demo` działa bez treningu i bez danych. Pochodzenie (run `20261121-225300-cnn-window-10s-s42`, test macro-F1 0,736), licencja danych (xeno-canto, użycie niekomercyjne) i zastrzeżenia są w `artifacts/demo-model/README.md`. Pozostałe modele (ResNet18 itd.) zostają poza repo.
+- **Dwa małe checkpointy demo są commitowane**: `artifacts/demo-model` (CNN 10 s, 1,6 MB) i `artifacts/demo-model-crnn` (CRNN-GRU 3 s, 4,9 MB) — decyzja 2026-11-24: po sklonowaniu repo `bird_recognizer demo` działa bez treningu i bez danych, a w UI można przełączać model. Pochodzenie, licencja danych (xeno-canto, użycie niekomercyjne) i zastrzeżenia są w `artifacts/*/README.md`. Pozostałe modele (ResNet18 itd.) zostają poza repo.
 - Nie loguj pełnych ciał odpowiedzi błędów bez przycięcia (max ~500 znaków).
 - Skan sekretów: `gitleaks` jako opcjonalny pre-commit; przed commitem sprawdź, czy `data/` i `runs/` nie są w indeksie.
 

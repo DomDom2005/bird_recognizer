@@ -30,7 +30,7 @@
 | 2026-11-22 | 8 | diagnoza awarii grupy `pretrained`: Podgląd zdarzeń wskazał `cublasLt64_13.dll`, `0xc00000fd` (przepełnienie stosu); repro na minimalnym ResNet18 potwierdziło, że ten sam krok w wątku z 64 MB stosu przechodzi; naprawa: CLI uruchamia komendy w wątku z dużym stosem (`_call_with_big_stack`), `demo` na CPU | `ruff` czysty, **257 testów** (w tym nowe testy helpera), grupa `pretrained` po naprawie ruszyła bez crashu (PID żyje, GPU aktywne) | trafne; przyczyna środowiskowa, nie zmiana modelu ani budżetu (odstępstwo 53) |
 | 2026-11-22 | 6/8 | **macierz domknięta**: `pretrained` scratch 0,644 / ImageNet 0,698; `eval --split test` na wszystkich 13 runach; `report` z 13 runów → `docs/experiments.md`; `error-analysis` na najlepszym runie (okno 10 s) | `report` exit 0, tabele zgodne z `index.csv`, `ruff` czysty, **259 testów**; najlepszy wynik całości: **CNN okno 10 s — test macro-F1 0,736** (top-3 0,902) | trafne; jeden seed, więc różnice ±0,01 bez rozstrzygnięcia (odstępstwa 54–56) |
 | 2026-11-22 | 8 | demo: dodany mikrofon (`sources=["microphone","upload"]`), wyłączona telemetria Gradio (`GRADIO_ANALYTICS_ENABLED=False`), żeby demo było offline zgodnie z FR-13; zaktualizowany opis UI | `ruff` czysty, testy demo 4/4; serwer startuje na `127.0.0.1:7860`, HTTP 200 | trafne; to domknięcie FR-A1 z `APP_SPEC` w istniejącym demo, nie nowy etap |
-| 2026-11-24 | 8/9 | **wbudowany model demo w repo**: `artifacts/demo-model/{best.pt, config.yaml, metrics.json, README.md}` (1,6 MB, CNN 10 s, test macro-F1 0,736); `demo` bez `--run` używa go domyślnie; wyjątek w `.gitignore` (`!artifacts/demo-model/best.pt`); README: szybki start po klonie bez danych i treningu | `demo --smoke` bez `--run` → exit 0 (2 okna tonu), nowe testy artefaktu i domyślnej ścieżki, testy demo 6/6; `ruff` czysty | trafne; świadome odstępstwo od „modele poza repo” (odstępstwo 57) |
+| 2026-11-24 | 8/9 | **wbudowane modele demo w repo**: `artifacts/demo-model` (CNN 10 s, 1,6 MB) i `artifacts/demo-model-crnn` (CRNN-GRU 3 s, 4,9 MB), każdy z `config.yaml`, `metrics.json`, `README.md`; `demo` bez `--run` ładuje oba i daje wybór modelu w UI (radio); wyjątki w `.gitignore`; README: szybki start po klonie bez danych i treningu | `demo --smoke` bez `--run` i z `--run artifacts/demo-model-crnn` → exit 0; UI na 7860/7861 HTTP 200 z oboma etykietami; nowe testy artefaktów i obu ścieżek, testy demo 7/7; `ruff` czysty | trafne; świadome odstępstwo od „modele poza repo” (odstępstwo 57) |
 
 ## Odstępstwa od SPEC
 
@@ -287,16 +287,18 @@ Każdy wpis: co SPEC zakładał, co jest naprawdę, gdzie poprawiono.
     Mixup + SpecAugment zwykle potrzebują dłuższego treningu; przy wspólnym budżecie i early
     stopping `full` nie zdążył się wyuczyć. To obserwacja o **budżecie**, nie dowód, że pełna
     augmentacja nie działa — wymagałaby osobnego runu z większą liczbą epok.
-57. **Wbudowany checkpoint demo w repo (decyzja 2026-11-24).** Właściciel chce, żeby po
+57. **Wbudowane checkpointy demo w repo (decyzja 2026-11-24).** Właściciel chce, żeby po
     sklonowaniu repo aplikacja działała od razu, bez pobierania danych i treningu. Zamiast
-    commitować całe `runs/` (dziesiątki MB), wybrano **jeden mały artefakt**: `artifacts/demo-model/`
-    z `best.pt` (1,58 MB, CNN 391 404 param., okno 10 s, test macro-F1 0,736), `config.yaml`,
-    `metrics.json` i `README.md` z pochodzeniem i licencją. `.gitignore` dostaje wyjątek
-    `!artifacts/demo-model/best.pt`; `bird_recognizer demo` bez `--run` ładuje ten katalog
-    (a `--run` nadal przyjmuje dowolny run). **Ryzyko licencyjne:** wagi powstały z nagrań
-    xeno-canto (głównie CC BY-NC-SA/ND) — dopuszczalne użycie **niekomercyjne**; nie jest to
-    redystrybucja audio, ale przy publikacji trzeba podać źródło i nie sprzedawać modelu.
-    Test `tests/test_demo.py` pilnuje, że artefakt istnieje i ma sensowne metryki.
+    commitować całe `runs/` (dziesiątki MB), wybrano **dwa małe artefakty**:
+    `artifacts/demo-model/` (CNN 391 404 param., okno 10 s, 1,58 MB, test macro-F1 0,736)
+    i `artifacts/demo-model-crnn/` (CRNN-GRU 1 212 396 param., okno 3 s, 4,86 MB, 0,707),
+    każdy z `config.yaml`, `metrics.json` i `README.md` z pochodzeniem i licencją. `.gitignore`
+    dostaje wyjątki `!artifacts/*/best.pt`; `bird_recognizer demo` bez `--run` ładuje oba
+    modele i pokazuje wybór w UI (radio), a `--run` nadal przyjmuje dowolny run. **Ryzyko
+    licencyjne:** wagi powstały z nagrań xeno-canto (głównie CC BY-NC-SA/ND) — dopuszczalne
+    użycie **niekomercyjne**; nie jest to redystrybucja audio, ale przy publikacji trzeba podać
+    źródło i nie sprzedawać modeli. Testy `tests/test_demo.py` pilnują kompletności artefaktów,
+    sensownych metryk i smoke'u obu ścieżek.
 
 ## Wznowienie po przerwie (2026-11-18)
 

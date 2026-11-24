@@ -45,23 +45,27 @@ LOGGER = logging.getLogger(__name__)
 #: SVM is O(n^2); cap the training set so a full run stays practical on CPU.
 MAX_SVM_TRAIN_WINDOWS = 20_000
 SMOKE_LIMIT_PER_SPECIES = 2
-#: Small committed checkpoint so the demo works after a fresh clone (no training).
-BUNDLED_DEMO_RUN = Path("artifacts") / "demo-model"
+#: Small committed checkpoints so the demo works after a fresh clone (no training).
+BUNDLED_DEMO_RUNS = (
+    Path("artifacts") / "demo-model",
+    Path("artifacts") / "demo-model-crnn",
+)
 
 
-def _bundled_demo_run() -> Path:
-    """Locate the committed demo model from cwd or from the source checkout."""
-    candidates = [
-        BUNDLED_DEMO_RUN,
-        Path(__file__).resolve().parents[2] / BUNDLED_DEMO_RUN,
-    ]
-    for candidate in candidates:
-        if (candidate / "best.pt").is_file():
-            return candidate
-    raise DataError(
-        "brak wbudowanego modelu demo (artifacts/demo-model) — "
-        "podaj --run <run_id> albo sklonuj repo z artefaktem"
-    )
+def _bundled_demo_paths() -> list[Path]:
+    """Locate committed demo models from cwd or from the source checkout."""
+    found: list[Path] = []
+    for relative in BUNDLED_DEMO_RUNS:
+        for base in (relative, Path(__file__).resolve().parents[2] / relative):
+            if (base / "best.pt").is_file():
+                found.append(base)
+                break
+    if not found:
+        raise DataError(
+            "brak wbudowanych modeli demo (artifacts/demo-model*) — "
+            "podaj --run <run_id> albo sklonuj repo z artefaktami"
+        )
+    return found
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1009,13 +1013,17 @@ def _cmd_demo(config: Config, args: argparse.Namespace) -> int:
     # Demo is a CPU application by design (SPEC FR-13); forcing CPU also avoids the
     # CUDA 13.2 cuBLASLt stack overflow in the Gradio server threads (journal 53).
     device = torch.device(args.device) if args.device else torch.device("cpu")
-    run = args.run if args.run else _bundled_demo_run()
-    bundle = evaluate_module.load_run(config, run, device=device)
+    paths = [args.run] if args.run else _bundled_demo_paths()
+    bundles = {}
+    for path in paths:
+        bundle = evaluate_module.load_run(config, path, device=device)
+        bundles[demo_module.model_label(bundle)] = bundle
+    first = next(iter(bundles.values()))
     if args.smoke:
-        return demo_module.smoke_check(bundle)
-    print(f"Demo: run {bundle.run_id}, model {bundle.model_name}, device {device}")
+        return demo_module.smoke_check(first)
+    print(f"Demo: {len(bundles)} model(e): {', '.join(bundles)}; device {device}")
     print(f"  otwieram http://127.0.0.1:{args.port} (Ctrl+C kończy)")
-    demo_module.launch(bundle, port=args.port)
+    demo_module.launch(bundles, port=args.port)
     return 0
 
 
